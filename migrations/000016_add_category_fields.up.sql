@@ -1,0 +1,7 @@
+-- Add missing fields to categories table
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS icon VARCHAR(100);
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS default_interest_rate DECIMAL(5,2) NOT NULL DEFAULT 10.00;
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS min_loan_amount DECIMAL(12,2);
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS max_loan_amount DECIMAL(12,2);
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS loan_to_value_ratio DECIMAL(5,2) NOT NULL DEFAULT 0.70;
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;

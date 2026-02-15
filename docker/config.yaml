@@ -1,0 +1,43 @@
+app:
+  name: "Pawnshop"
+  environment: "development"
+  debug: true
+  version: "1.0.0"
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: "15s"
+  write_timeout: "15s"
+  idle_timeout: "60s"
+
+database:
+  host: "postgres"
+  port: 5432
+  user: "postgres"
+  password: "postgres"
+  dbname: "pawnshop"
+  sslmode: "disable"
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: "5m"
+
+redis:
+  host: "redis"
+  port: 6379
+  password: ""
+  db: 0
+
+jwt:
+  secret: "your-super-secret-key-change-in-production"
+  access_token_ttl: "15m"
+  refresh_token_ttl: "168h"
+  issuer: "pawnshop"
+
+storage:
+  type: "local"
+  endpoint: ""
+  access_key: ""
+  secret_key: ""
+  bucket: "pawnshop"
+  region: "us-east-1"

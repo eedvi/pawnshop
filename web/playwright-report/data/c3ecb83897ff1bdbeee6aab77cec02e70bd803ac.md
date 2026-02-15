@@ -1,0 +1,180 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - link "P PawnShop" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: P
+          - generic [ref=e8]: PawnShop
+        - button [ref=e9] [cursor=pointer]:
+          - img
+      - navigation [ref=e10]:
+        - list [ref=e11]:
+          - listitem [ref=e12]:
+            - link "Dashboard" [ref=e13] [cursor=pointer]:
+              - /url: /
+              - img [ref=e14]
+              - generic [ref=e19]: Dashboard
+          - listitem [ref=e20]:
+            - link "Clientes" [ref=e21] [cursor=pointer]:
+              - /url: /customers
+              - img [ref=e22]
+              - generic [ref=e27]: Clientes
+          - listitem [ref=e28]:
+            - link "Artículos" [ref=e29] [cursor=pointer]:
+              - /url: /items
+              - img [ref=e30]
+              - generic [ref=e34]: Artículos
+          - listitem [ref=e35]:
+            - link "Préstamos" [ref=e36] [cursor=pointer]:
+              - /url: /loans
+              - img [ref=e37]
+              - generic [ref=e40]: Préstamos
+          - listitem [ref=e41]:
+            - link "Pagos" [ref=e42] [cursor=pointer]:
+              - /url: /payments
+              - img [ref=e43]
+              - generic [ref=e45]: Pagos
+          - listitem [ref=e46]:
+            - link "Ventas" [ref=e47] [cursor=pointer]:
+              - /url: /sales
+              - img [ref=e48]
+              - generic [ref=e52]: Ventas
+          - listitem [ref=e53]:
+            - link "Caja" [ref=e54] [cursor=pointer]:
+              - /url: /cash
+              - img [ref=e55]
+              - generic [ref=e57]: Caja
+          - listitem [ref=e58]:
+            - link "Reportes" [ref=e59] [cursor=pointer]:
+              - /url: /reports
+              - img [ref=e60]
+              - generic [ref=e62]: Reportes
+          - listitem [ref=e63]
+          - listitem [ref=e65]:
+            - link "Gastos" [ref=e66] [cursor=pointer]:
+              - /url: /expenses
+              - img [ref=e67]
+              - generic [ref=e70]: Gastos
+          - listitem [ref=e71]:
+            - link "Transferencias" [ref=e72] [cursor=pointer]:
+              - /url: /transfers
+              - img [ref=e73]
+              - generic [ref=e76]: Transferencias
+          - listitem [ref=e77]
+          - listitem [ref=e79]:
+            - link "Usuarios" [ref=e80] [cursor=pointer]:
+              - /url: /users
+              - img [ref=e81]
+              - generic [ref=e93]: Usuarios
+          - listitem [ref=e94]:
+            - link "Sucursales" [ref=e95] [cursor=pointer]:
+              - /url: /branches
+              - img [ref=e96]
+              - generic [ref=e100]: Sucursales
+          - listitem [ref=e101]:
+            - link "Categorías" [ref=e102] [cursor=pointer]:
+              - /url: /categories
+              - img [ref=e103]
+              - generic [ref=e108]: Categorías
+          - listitem [ref=e109]:
+            - link "Roles" [ref=e110] [cursor=pointer]:
+              - /url: /roles
+              - img [ref=e111]
+              - generic [ref=e113]: Roles
+          - listitem [ref=e114]:
+            - link "Notificaciones" [ref=e115] [cursor=pointer]:
+              - /url: /notifications
+              - img [ref=e116]
+              - generic [ref=e119]: Notificaciones
+          - listitem [ref=e120]:
+            - link "Auditoría" [ref=e121] [cursor=pointer]:
+              - /url: /audit
+              - img [ref=e122]
+              - generic [ref=e127]: Auditoría
+          - listitem [ref=e128]:
+            - link "Configuración" [ref=e129] [cursor=pointer]:
+              - /url: /settings
+              - img [ref=e130]
+              - generic [ref=e133]: Configuración
+    - banner [ref=e134]:
+      - generic [ref=e135]:
+        - button [ref=e136] [cursor=pointer]:
+          - img
+        - button [ref=e137] [cursor=pointer]:
+          - img
+        - button "AS Admin Sistema" [ref=e138] [cursor=pointer]:
+          - generic [ref=e139]: AS
+          - generic [ref=e140]: Admin Sistema
+          - img
+    - main [ref=e141]:
+      - generic [ref=e143]:
+        - generic [ref=e144]:
+          - generic [ref=e146]:
+            - heading "Pagos" [level=1] [ref=e147]
+            - paragraph [ref=e148]: Registro de pagos recibidos
+          - link "Nuevo Pago" [ref=e150] [cursor=pointer]:
+            - /url: /payments/new
+            - img
+            - text: Nuevo Pago
+        - generic [ref=e151]:
+          - generic [ref=e152]:
+            - generic [ref=e154]:
+              - img [ref=e155]
+              - textbox "Buscar por número de pago o cliente..." [ref=e158]
+            - button "Columnas" [ref=e160] [cursor=pointer]:
+              - img
+              - text: Columnas
+          - table [ref=e163]:
+            - rowgroup [ref=e164]:
+              - row "No. Pago Préstamo Cliente Monto Método Fecha Estado" [ref=e165]:
+                - columnheader "No. Pago" [ref=e166]:
+                  - button "No. Pago" [ref=e168] [cursor=pointer]:
+                    - generic [ref=e169]: No. Pago
+                    - img
+                - columnheader "Préstamo" [ref=e170]
+                - columnheader "Cliente" [ref=e171]
+                - columnheader "Monto" [ref=e172]:
+                  - button "Monto" [ref=e174] [cursor=pointer]:
+                    - generic [ref=e175]: Monto
+                    - img
+                - columnheader "Método" [ref=e176]
+                - columnheader "Fecha" [ref=e177]:
+                  - button "Fecha" [ref=e179] [cursor=pointer]:
+                    - generic [ref=e180]: Fecha
+                    - img
+                - columnheader "Estado" [ref=e181]
+                - columnheader [ref=e182]
+            - rowgroup [ref=e183]:
+              - row "No hay pagos registrados" [ref=e184]:
+                - cell "No hay pagos registrados" [ref=e185]
+          - generic [ref=e186]:
+            - generic [ref=e187]: Mostrando 1 a 20 de 20 resultados
+            - generic [ref=e188]:
+              - generic [ref=e189]:
+                - paragraph [ref=e190]: Filas por página
+                - combobox [ref=e191] [cursor=pointer]:
+                  - generic: "20"
+                  - img [ref=e192]
+              - generic [ref=e194]:
+                - button "Ir a primera página" [disabled]:
+                  - generic: Ir a primera página
+                  - img
+                - button "Página anterior" [disabled]:
+                  - generic: Página anterior
+                  - img
+                - generic [ref=e195]: Página 1 de 1
+                - button "Página siguiente" [disabled]:
+                  - generic: Página siguiente
+                  - img
+                - button "Ir a última página" [disabled]:
+                  - generic: Ir a última página
+                  - img
+  - generic [ref=e196]:
+    - img [ref=e198]
+    - button "Open Tanstack query devtools" [ref=e246] [cursor=pointer]:
+      - img [ref=e247]
+```

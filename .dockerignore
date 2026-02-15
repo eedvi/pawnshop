@@ -1,0 +1,54 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+*.test
+coverage.out
+coverage.html
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Docker
+Dockerfile*
+docker-compose*
+.docker
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Temp files
+tmp/
+temp/
+*.tmp
+*.log
+
+# Environment files (should be injected)
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db

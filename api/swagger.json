@@ -1,0 +1,673 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Pawnshop Management System API",
+    "description": "A comprehensive API for managing pawnshop operations including loans, customers, items, payments, and sales.",
+    "version": "1.0",
+    "contact": {
+      "name": "API Support",
+      "email": "support@pawnshop.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "host": "localhost:8090",
+  "basePath": "/api/v1",
+  "schemes": ["http"],
+  "securityDefinitions": {
+    "BearerAuth": {
+      "type": "apiKey",
+      "name": "Authorization",
+      "in": "header",
+      "description": "Type 'Bearer' followed by a space and the JWT token."
+    }
+  },
+  "tags": [
+    {"name": "Auth", "description": "Authentication endpoints"},
+    {"name": "Users", "description": "User management endpoints"},
+    {"name": "Customers", "description": "Customer management endpoints"},
+    {"name": "Items", "description": "Item/inventory management endpoints"},
+    {"name": "Loans", "description": "Loan management endpoints"},
+    {"name": "Payments", "description": "Payment processing endpoints"},
+    {"name": "Sales", "description": "Sales management endpoints"},
+    {"name": "Cash", "description": "Cash register and session management"},
+    {"name": "Branches", "description": "Branch management endpoints"},
+    {"name": "Categories", "description": "Item category management endpoints"},
+    {"name": "Roles", "description": "Role and permission management endpoints"},
+    {"name": "Reports", "description": "Reports and analytics endpoints"},
+    {"name": "Settings", "description": "System settings endpoints"},
+    {"name": "Audit", "description": "Audit log endpoints"}
+  ],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Login",
+        "description": "Authenticate user and return tokens",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/LoginInput"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful login",
+            "schema": {
+              "$ref": "#/definitions/LoginResponse"
+            }
+          },
+          "401": {
+            "description": "Invalid credentials"
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Refresh Token",
+        "description": "Generate new access token using refresh token",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RefreshInput"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token refreshed successfully",
+            "schema": {
+              "$ref": "#/definitions/LoginResponse"
+            }
+          },
+          "401": {
+            "description": "Invalid refresh token"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Logout",
+        "description": "Invalidate all user tokens",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "204": {
+            "description": "Successfully logged out"
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Get Current User",
+        "description": "Get the currently authenticated user's profile",
+        "security": [{"BearerAuth": []}],
+        "produces": ["application/json"],
+        "responses": {
+          "200": {
+            "description": "Current user profile",
+            "schema": {
+              "$ref": "#/definitions/UserPublic"
+            }
+          }
+        }
+      }
+    },
+    "/auth/change-password": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Change Password",
+        "description": "Change the current user's password",
+        "security": [{"BearerAuth": []}],
+        "consumes": ["application/json"],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ChangePasswordInput"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Password changed successfully"
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "List Users",
+        "description": "Get a paginated list of users",
+        "security": [{"BearerAuth": []}],
+        "produces": ["application/json"],
+        "parameters": [
+          {"name": "page", "in": "query", "type": "integer", "default": 1},
+          {"name": "per_page", "in": "query", "type": "integer", "default": 20},
+          {"name": "branch_id", "in": "query", "type": "integer"},
+          {"name": "role_id", "in": "query", "type": "integer"},
+          {"name": "search", "in": "query", "type": "string"}
+        ],
+        "responses": {
+          "200": {
+            "description": "List of users"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Users"],
+        "summary": "Create User",
+        "description": "Create a new user",
+        "security": [{"BearerAuth": []}],
+        "consumes": ["application/json"],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CreateUserInput"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "User created successfully"
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get User",
+        "description": "Get a user by ID",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "type": "integer"}
+        ],
+        "responses": {
+          "200": {
+            "description": "User details"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Users"],
+        "summary": "Update User",
+        "description": "Update a user by ID",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "type": "integer"}
+        ],
+        "responses": {
+          "200": {
+            "description": "User updated"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Users"],
+        "summary": "Delete User",
+        "description": "Delete a user by ID",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "type": "integer"}
+        ],
+        "responses": {
+          "204": {
+            "description": "User deleted"
+          }
+        }
+      }
+    },
+    "/customers": {
+      "get": {
+        "tags": ["Customers"],
+        "summary": "List Customers",
+        "description": "Get a paginated list of customers",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "page", "in": "query", "type": "integer", "default": 1},
+          {"name": "per_page", "in": "query", "type": "integer", "default": 20},
+          {"name": "branch_id", "in": "query", "type": "integer"},
+          {"name": "search", "in": "query", "type": "string"}
+        ],
+        "responses": {
+          "200": {
+            "description": "List of customers"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Customers"],
+        "summary": "Create Customer",
+        "description": "Create a new customer",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "201": {
+            "description": "Customer created"
+          }
+        }
+      }
+    },
+    "/items": {
+      "get": {
+        "tags": ["Items"],
+        "summary": "List Items",
+        "description": "Get a paginated list of items",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "page", "in": "query", "type": "integer", "default": 1},
+          {"name": "per_page", "in": "query", "type": "integer", "default": 20},
+          {"name": "branch_id", "in": "query", "type": "integer"},
+          {"name": "status", "in": "query", "type": "string"},
+          {"name": "search", "in": "query", "type": "string"}
+        ],
+        "responses": {
+          "200": {
+            "description": "List of items"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Items"],
+        "summary": "Create Item",
+        "description": "Create a new item",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "201": {
+            "description": "Item created"
+          }
+        }
+      }
+    },
+    "/loans": {
+      "get": {
+        "tags": ["Loans"],
+        "summary": "List Loans",
+        "description": "Get a paginated list of loans",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "page", "in": "query", "type": "integer", "default": 1},
+          {"name": "per_page", "in": "query", "type": "integer", "default": 20},
+          {"name": "branch_id", "in": "query", "type": "integer"},
+          {"name": "customer_id", "in": "query", "type": "integer"},
+          {"name": "status", "in": "query", "type": "string"}
+        ],
+        "responses": {
+          "200": {
+            "description": "List of loans"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Loans"],
+        "summary": "Create Loan",
+        "description": "Create a new loan",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "201": {
+            "description": "Loan created"
+          }
+        }
+      }
+    },
+    "/payments": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "List Payments",
+        "description": "Get a paginated list of payments",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of payments"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Payments"],
+        "summary": "Create Payment",
+        "description": "Process a new payment",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "201": {
+            "description": "Payment processed"
+          }
+        }
+      }
+    },
+    "/sales": {
+      "get": {
+        "tags": ["Sales"],
+        "summary": "List Sales",
+        "description": "Get a paginated list of sales",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of sales"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Sales"],
+        "summary": "Create Sale",
+        "description": "Create a new sale",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "201": {
+            "description": "Sale created"
+          }
+        }
+      }
+    },
+    "/branches": {
+      "get": {
+        "tags": ["Branches"],
+        "summary": "List Branches",
+        "description": "Get a list of all branches",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of branches"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Branches"],
+        "summary": "Create Branch",
+        "description": "Create a new branch",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "201": {
+            "description": "Branch created"
+          }
+        }
+      }
+    },
+    "/categories": {
+      "get": {
+        "tags": ["Categories"],
+        "summary": "List Categories",
+        "description": "Get a list of item categories",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of categories"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Categories"],
+        "summary": "Create Category",
+        "description": "Create a new category",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "201": {
+            "description": "Category created"
+          }
+        }
+      }
+    },
+    "/roles": {
+      "get": {
+        "tags": ["Roles"],
+        "summary": "List Roles",
+        "description": "Get a list of all roles",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of roles"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Roles"],
+        "summary": "Create Role",
+        "description": "Create a new role",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "201": {
+            "description": "Role created"
+          }
+        }
+      }
+    },
+    "/roles/permissions": {
+      "get": {
+        "tags": ["Roles"],
+        "summary": "List Available Permissions",
+        "description": "Get a list of all available permissions",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of permissions"
+          }
+        }
+      }
+    },
+    "/reports/dashboard": {
+      "get": {
+        "tags": ["Reports"],
+        "summary": "Dashboard Stats",
+        "description": "Get dashboard statistics",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Dashboard statistics"
+          }
+        }
+      }
+    },
+    "/settings": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "List Settings",
+        "description": "Get all system settings",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of settings"
+          }
+        }
+      }
+    },
+    "/audit": {
+      "get": {
+        "tags": ["Audit"],
+        "summary": "List Audit Logs",
+        "description": "Get audit logs with filters",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "page", "in": "query", "type": "integer", "default": 1},
+          {"name": "per_page", "in": "query", "type": "integer", "default": 50},
+          {"name": "user_id", "in": "query", "type": "integer"},
+          {"name": "action", "in": "query", "type": "string"},
+          {"name": "entity_type", "in": "query", "type": "string"}
+        ],
+        "responses": {
+          "200": {
+            "description": "List of audit logs"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "LoginInput": {
+      "type": "object",
+      "required": ["email", "password"],
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "example": "admin@pawnshop.com"
+        },
+        "password": {
+          "type": "string",
+          "example": "admin123"
+        }
+      }
+    },
+    "RefreshInput": {
+      "type": "object",
+      "required": ["refresh_token"],
+      "properties": {
+        "refresh_token": {
+          "type": "string"
+        }
+      }
+    },
+    "ChangePasswordInput": {
+      "type": "object",
+      "required": ["current_password", "new_password"],
+      "properties": {
+        "current_password": {
+          "type": "string"
+        },
+        "new_password": {
+          "type": "string",
+          "minLength": 8
+        }
+      }
+    },
+    "LoginResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "user": {
+              "$ref": "#/definitions/UserPublic"
+            },
+            "access_token": {
+              "type": "string"
+            },
+            "refresh_token": {
+              "type": "string"
+            },
+            "expires_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "token_type": {
+              "type": "string",
+              "example": "Bearer"
+            }
+          }
+        }
+      }
+    },
+    "UserPublic": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "email": {
+          "type": "string"
+        },
+        "first_name": {
+          "type": "string"
+        },
+        "last_name": {
+          "type": "string"
+        },
+        "full_name": {
+          "type": "string"
+        },
+        "is_active": {
+          "type": "boolean"
+        },
+        "branch_id": {
+          "type": "integer"
+        },
+        "role_id": {
+          "type": "integer"
+        },
+        "role": {
+          "$ref": "#/definitions/Role"
+        }
+      }
+    },
+    "Role": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "is_system": {
+          "type": "boolean"
+        }
+      }
+    },
+    "CreateUserInput": {
+      "type": "object",
+      "required": ["email", "password", "first_name", "last_name", "role_id"],
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "password": {
+          "type": "string",
+          "minLength": 8
+        },
+        "first_name": {
+          "type": "string"
+        },
+        "last_name": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "role_id": {
+          "type": "integer"
+        },
+        "branch_id": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

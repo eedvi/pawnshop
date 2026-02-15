@@ -1,0 +1,4 @@
+-- Note: PostgreSQL does not support removing values from an enum type directly.
+-- To fully revert, you would need to create a new enum type without these values
+-- and migrate all data. This is left as a no-op for safety.
+-- The added values are: 'pawned', 'for_sale', 'in_transfer'

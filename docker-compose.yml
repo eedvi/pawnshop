@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PAWN_APP_NAME=Pawnshop API
+      - PAWN_APP_VERSION=1.0.0
+      - PAWN_APP_ENVIRONMENT=development
+      - PAWN_APP_DEBUG=true
+      - PAWN_SERVER_HOST=0.0.0.0
+      - PAWN_SERVER_PORT=8080
+      - PAWN_DATABASE_HOST=postgres
+      - PAWN_DATABASE_PORT=5432
+      - PAWN_DATABASE_USER=pawnshop
+      - PAWN_DATABASE_PASSWORD=pawnshop_secret
+      - PAWN_DATABASE_DBNAME=pawnshop
+      - PAWN_DATABASE_SSLMODE=disable
+      - PAWN_JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - PAWN_JWT_ACCESS_TOKEN_TTL=15m
+      - PAWN_JWT_REFRESH_TOKEN_TTL=168h
+      - PAWN_REDIS_HOST=redis
+      - PAWN_REDIS_PORT=6379
+      - PAWN_REDIS_PASSWORD=
+      - PAWN_REDIS_DB=0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - pawnshop-network
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["./worker"]
+    environment:
+      - PAWN_APP_NAME=Pawnshop Worker
+      - PAWN_APP_VERSION=1.0.0
+      - PAWN_APP_ENVIRONMENT=development
+      - PAWN_DATABASE_HOST=postgres
+      - PAWN_DATABASE_PORT=5432
+      - PAWN_DATABASE_USER=pawnshop
+      - PAWN_DATABASE_PASSWORD=pawnshop_secret
+      - PAWN_DATABASE_DBNAME=pawnshop
+      - PAWN_DATABASE_SSLMODE=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - pawnshop-network
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["./migrate", "up"]
+    environment:
+      - PAWN_DATABASE_HOST=postgres
+      - PAWN_DATABASE_PORT=5432
+      - PAWN_DATABASE_USER=pawnshop
+      - PAWN_DATABASE_PASSWORD=pawnshop_secret
+      - PAWN_DATABASE_DBNAME=pawnshop
+      - PAWN_DATABASE_SSLMODE=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pawnshop-network
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=pawnshop
+      - POSTGRES_PASSWORD=pawnshop_secret
+      - POSTGRES_DB=pawnshop
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pawnshop"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pawnshop-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pawnshop-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  pawnshop-network:
+    driver: bridge

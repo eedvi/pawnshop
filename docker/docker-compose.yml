@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: pawnshop-api
+    ports:
+      - "8080:8080"
+    environment:
+      - PAWN_DATABASE_HOST=postgres
+      - PAWN_DATABASE_PORT=5432
+      - PAWN_DATABASE_USER=postgres
+      - PAWN_DATABASE_PASSWORD=postgres
+      - PAWN_DATABASE_DBNAME=pawnshop
+      - PAWN_DATABASE_SSLMODE=disable
+      - PAWN_REDIS_HOST=redis
+      - PAWN_REDIS_PORT=6379
+      - PAWN_JWT_SECRET=your-super-secret-key-change-in-production
+      - PAWN_APP_ENVIRONMENT=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - pawnshop-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: pawnshop-postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=pawnshop
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pawnshop-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: pawnshop-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pawnshop-network
+    restart: unless-stopped
+
+  # Optional: Adminer for database management
+  adminer:
+    image: adminer:latest
+    container_name: pawnshop-adminer
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres
+    networks:
+      - pawnshop-network
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  pawnshop-network:
+    driver: bridge
