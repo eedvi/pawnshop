@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"pawnshop/internal/config"
@@ -60,7 +61,7 @@ func TestNewBackupService(t *testing.T) {
 
 	// Create service with a new subdirectory
 	backupDir := filepath.Join(tempDir, "backups")
-	svc := NewBackupService(dbConfig, backupDir)
+	svc := NewBackupService(dbConfig, backupDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 
 	assert.NotNil(t, svc)
 
@@ -74,7 +75,7 @@ func TestBackupService_ListBackups(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	// Create some test backup files
@@ -111,7 +112,7 @@ func TestBackupService_ListBackups_EmptyDir(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	backups, err := svc.ListBackups(ctx)
@@ -124,7 +125,7 @@ func TestBackupService_DeleteBackup(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	// Create a test backup file
@@ -149,7 +150,7 @@ func TestBackupService_DeleteBackup_NotFound(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	err := svc.DeleteBackup(ctx, "nonexistent.sql.gz")
@@ -162,7 +163,7 @@ func TestBackupService_DeleteBackup_PathTraversal(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	tests := []struct {
@@ -189,7 +190,7 @@ func TestBackupService_GetBackup(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	// Create a test backup file
@@ -212,7 +213,7 @@ func TestBackupService_GetBackup_NotFound(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	reader, info, err := svc.GetBackup(ctx, "nonexistent.sql.gz")
@@ -227,7 +228,7 @@ func TestBackupService_GetBackup_PathTraversal(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	tests := []struct {
@@ -255,7 +256,7 @@ func TestBackupService_CleanupOldBackups(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	// Create backup files with different ages
@@ -300,7 +301,7 @@ func TestBackupService_CleanupOldBackups_NoOldBackups(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	// Create only recent backups
@@ -316,7 +317,7 @@ func TestBackupService_CleanupOldBackups_SkipsNonBackups(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	// Create non-backup files with old timestamps
@@ -364,7 +365,7 @@ func TestBackupService_RestoreBackup_FileNotFound(t *testing.T) {
 		Password: "test",
 		DBName:   "testdb",
 	}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	err := svc.RestoreBackup(ctx, "nonexistent_backup.sql.gz")
@@ -377,7 +378,7 @@ func TestBackupService_ListBackups_WithSubdirectories(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	// Create a backup and a subdirectory
@@ -398,7 +399,7 @@ func TestBackupService_GetBackup_NonCompressed(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled))
 	ctx := context.Background()
 
 	// Create a non-compressed backup
@@ -419,7 +420,7 @@ func TestBackupService_getGzipComment(t *testing.T) {
 	defer cleanup()
 
 	dbConfig := &config.DatabaseConfig{}
-	svc := NewBackupService(dbConfig, tempDir).(*backupService)
+	svc := NewBackupService(dbConfig, tempDir, zerolog.New(os.Stdout).Level(zerolog.Disabled)).(*backupService)
 
 	// Create gzipped file with comment
 	filename := "test_with_comment.sql.gz"

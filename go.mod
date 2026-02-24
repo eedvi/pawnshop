@@ -3,6 +3,7 @@ module pawnshop
 go 1.24.0
 
 require (
+	github.com/alicebob/miniredis/v2 v2.36.1
 	github.com/go-playground/validator/v10 v10.17.0
 	github.com/gofiber/fiber/v2 v2.52.11
 	github.com/golang-jwt/jwt/v5 v5.2.0
@@ -21,7 +22,6 @@ require (
 )
 
 require (
-	github.com/alicebob/miniredis/v2 v2.36.1 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/boombuler/barcode v1.0.1 // indirect

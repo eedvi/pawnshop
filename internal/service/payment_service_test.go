@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"pawnshop/internal/domain"
@@ -17,7 +19,8 @@ func setupPaymentService() (*PaymentService, *mocks.MockPaymentRepository, *mock
 	paymentRepo := new(mocks.MockPaymentRepository)
 	loanRepo := new(mocks.MockLoanRepository)
 	customerRepo := new(mocks.MockCustomerRepository)
-	service := NewPaymentService(paymentRepo, loanRepo, customerRepo)
+	logger := zerolog.New(os.Stdout).Level(zerolog.Disabled)
+	service := NewPaymentService(paymentRepo, loanRepo, customerRepo, logger)
 	return service, paymentRepo, loanRepo, customerRepo
 }
 

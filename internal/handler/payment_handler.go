@@ -4,10 +4,12 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog"
 	"pawnshop/internal/domain"
 	"pawnshop/internal/middleware"
 	"pawnshop/internal/repository"
 	"pawnshop/internal/service"
+	"pawnshop/pkg/logger"
 	"pawnshop/pkg/response"
 	"pawnshop/pkg/validator"
 )
@@ -16,17 +18,25 @@ import (
 type PaymentHandler struct {
 	paymentService *service.PaymentService
 	auditLogger    *middleware.AuditLogger
+	logger         zerolog.Logger
 }
 
 // NewPaymentHandler creates a new PaymentHandler
-func NewPaymentHandler(paymentService *service.PaymentService, auditLogger *middleware.AuditLogger) *PaymentHandler {
-	return &PaymentHandler{paymentService: paymentService, auditLogger: auditLogger}
+func NewPaymentHandler(paymentService *service.PaymentService, auditLogger *middleware.AuditLogger, logger zerolog.Logger) *PaymentHandler {
+	return &PaymentHandler{
+		paymentService: paymentService,
+		auditLogger:    auditLogger,
+		logger:         logger.With().Str("handler", "payment").Logger(),
+	}
 }
 
 // Create handles payment creation
 func (h *PaymentHandler) Create(c *fiber.Ctx) error {
+	log := logger.FromContext(c.UserContext(), h.logger)
+
 	var input service.CreatePaymentInput
 	if err := c.BodyParser(&input); err != nil {
+		log.Warn().Err(err).Msg("Failed to parse payment request body")
 		return response.BadRequest(c, "Error parsing request body: "+err.Error())
 	}
 
@@ -39,13 +49,24 @@ func (h *PaymentHandler) Create(c *fiber.Ctx) error {
 
 	// Validate
 	if errors := validator.Validate(&input); errors != nil {
+		log.Warn().Interface("validation_errors", errors).Msg("Payment validation failed")
 		return response.ValidationError(c, errors)
 	}
 
+	// Service layer handles detailed logging
 	result, err := h.paymentService.Create(c.Context(), input)
 	if err != nil {
+		// Service already logged the error
 		return response.BadRequest(c, err.Error())
 	}
+
+	log.Info().
+		Int64("payment_id", result.Payment.ID).
+		Str("payment_number", result.Payment.PaymentNumber).
+		Int64("loan_id", input.LoanID).
+		Float64("amount", input.Amount).
+		Bool("fully_paid", result.IsFullyPaid).
+		Msg("Payment created successfully at handler level")
 
 	return response.Created(c, result)
 }

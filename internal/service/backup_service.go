@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rs/zerolog"
 	"pawnshop/internal/config"
 )
 
@@ -50,16 +51,18 @@ type BackupService interface {
 type backupService struct {
 	dbConfig  *config.DatabaseConfig
 	backupDir string
+	logger    zerolog.Logger
 }
 
 // NewBackupService creates a new backup service
-func NewBackupService(dbConfig *config.DatabaseConfig, backupDir string) BackupService {
+func NewBackupService(dbConfig *config.DatabaseConfig, backupDir string, logger zerolog.Logger) BackupService {
 	// Ensure backup directory exists
 	os.MkdirAll(backupDir, 0755)
 
 	return &backupService{
 		dbConfig:  dbConfig,
 		backupDir: backupDir,
+		logger:    logger.With().Str("service", "backup").Logger(),
 	}
 }
 
@@ -67,6 +70,11 @@ func (s *backupService) CreateBackup(ctx context.Context, description string) (*
 	timestamp := time.Now().Format("20060102_150405")
 	filename := fmt.Sprintf("pawnshop_backup_%s.sql.gz", timestamp)
 	filepath := filepath.Join(s.backupDir, filename)
+
+	s.logger.Info().
+		Str("filename", filename).
+		Str("description", description).
+		Msg("Starting database backup")
 
 	// Create pg_dump command
 	cmd := exec.CommandContext(ctx, "pg_dump",
@@ -79,12 +87,13 @@ func (s *backupService) CreateBackup(ctx context.Context, description string) (*
 		"--no-privileges",
 	)
 
-	// Set password via environment variable
+	// Set password via environment variable (NEVER log this)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", s.dbConfig.Password))
 
 	// Create output file with gzip compression
 	outFile, err := os.Create(filepath)
 	if err != nil {
+		s.logger.Error().Err(err).Str("filepath", filepath).Msg("Failed to create backup file")
 		return nil, fmt.Errorf("failed to create backup file: %w", err)
 	}
 	defer outFile.Close()
@@ -107,19 +116,32 @@ func (s *backupService) CreateBackup(ctx context.Context, description string) (*
 	// Run the backup
 	if err := cmd.Run(); err != nil {
 		os.Remove(filepath) // Clean up partial file
+		s.logger.Error().
+			Err(err).
+			Str("filename", filename).
+			Str("stderr", stderr.String()).
+			Msg("pg_dump failed")
 		return nil, fmt.Errorf("pg_dump failed: %s - %w", stderr.String(), err)
 	}
 
 	// Ensure gzip is flushed
 	if err := gzWriter.Close(); err != nil {
+		s.logger.Error().Err(err).Msg("Failed to close gzip writer")
 		return nil, fmt.Errorf("failed to close gzip writer: %w", err)
 	}
 
 	// Get file info
 	fileInfo, err := os.Stat(filepath)
 	if err != nil {
+		s.logger.Error().Err(err).Str("filepath", filepath).Msg("Failed to get backup file info")
 		return nil, fmt.Errorf("failed to get backup file info: %w", err)
 	}
+
+	s.logger.Info().
+		Str("filename", filename).
+		Int64("size_bytes", fileInfo.Size()).
+		Str("size_mb", fmt.Sprintf("%.2f", float64(fileInfo.Size())/1024/1024)).
+		Msg("Database backup completed successfully")
 
 	return &BackupInfo{
 		Filename:    filename,
@@ -133,14 +155,20 @@ func (s *backupService) CreateBackup(ctx context.Context, description string) (*
 func (s *backupService) RestoreBackup(ctx context.Context, filename string) error {
 	filepath := filepath.Join(s.backupDir, filename)
 
+	s.logger.Warn().
+		Str("filename", filename).
+		Msg("Starting database restore - this will overwrite existing data")
+
 	// Check if file exists
 	if _, err := os.Stat(filepath); os.IsNotExist(err) {
+		s.logger.Error().Str("filename", filename).Msg("Backup file not found")
 		return fmt.Errorf("backup file not found: %s", filename)
 	}
 
 	// Open the backup file
 	file, err := os.Open(filepath)
 	if err != nil {
+		s.logger.Error().Err(err).Str("filename", filename).Msg("Failed to open backup file")
 		return fmt.Errorf("failed to open backup file: %w", err)
 	}
 	defer file.Close()
@@ -150,6 +178,7 @@ func (s *backupService) RestoreBackup(ctx context.Context, filename string) erro
 	if strings.HasSuffix(filename, ".gz") {
 		gzReader, err := gzip.NewReader(file)
 		if err != nil {
+			s.logger.Error().Err(err).Msg("Failed to create gzip reader")
 			return fmt.Errorf("failed to create gzip reader: %w", err)
 		}
 		defer gzReader.Close()
@@ -165,7 +194,7 @@ func (s *backupService) RestoreBackup(ctx context.Context, filename string) erro
 		"-v", "ON_ERROR_STOP=1",
 	)
 
-	// Set password via environment variable
+	// Set password via environment variable (NEVER log this)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", s.dbConfig.Password))
 
 	// Pipe backup content to psql
@@ -177,9 +206,15 @@ func (s *backupService) RestoreBackup(ctx context.Context, filename string) erro
 
 	// Run the restore
 	if err := cmd.Run(); err != nil {
+		s.logger.Error().
+			Err(err).
+			Str("filename", filename).
+			Str("stderr", stderr.String()).
+			Msg("Database restore failed")
 		return fmt.Errorf("restore failed: %s - %w", stderr.String(), err)
 	}
 
+	s.logger.Info().Str("filename", filename).Msg("Database restore completed successfully")
 	return nil
 }
 

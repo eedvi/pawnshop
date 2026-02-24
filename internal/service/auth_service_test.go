@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"pawnshop/internal/domain"
@@ -26,7 +28,10 @@ func setupAuthService() (*AuthService, *mocks.MockUserRepository, *mocks.MockRol
 	})
 	passwordManager := auth.NewPasswordManager()
 
-	service := NewAuthService(userRepo, roleRepo, refreshTokenRepo, jwtManager, passwordManager)
+	// Create a test logger that discards output
+	logger := zerolog.New(os.Stdout).Level(zerolog.Disabled)
+
+	service := NewAuthService(userRepo, roleRepo, refreshTokenRepo, jwtManager, passwordManager, logger)
 
 	return service, userRepo, roleRepo, refreshTokenRepo
 }

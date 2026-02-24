@@ -324,7 +324,7 @@ func TestCustomerService_Create_UnderageBirthDate(t *testing.T) {
 		IdentityType:   "DPI",
 		IdentityNumber: "1234567890",
 		Phone:          "555-1234",
-		BirthDate:      &birthDate,
+		BirthDate:      birthDate.Format("2006-01-02"),
 	}
 	result, err := service.Create(ctx, input)
 
@@ -350,7 +350,7 @@ func TestCustomerService_Create_AdultBirthDate(t *testing.T) {
 		IdentityType:   "DPI",
 		IdentityNumber: "9999999999",
 		Phone:          "555-1234",
-		BirthDate:      &birthDate,
+		BirthDate:      birthDate.Format("2006-01-02"),
 	}
 	result, err := service.Create(ctx, input)
 

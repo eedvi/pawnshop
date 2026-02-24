@@ -104,12 +104,12 @@ func main() {
 	passwordManager := auth.NewPasswordManager()
 
 	// Initialize services
-	authService := service.NewAuthService(userRepo, roleRepo, refreshTokenRepo, jwtManager, passwordManager)
+	authService := service.NewAuthService(userRepo, roleRepo, refreshTokenRepo, jwtManager, passwordManager, log.Logger)
 	userService := service.NewUserService(userRepo, roleRepo, branchRepo, passwordManager)
 	customerService := service.NewCustomerService(customerRepo, branchRepo)
 	itemService := service.NewItemService(itemRepo, branchRepo, categoryRepo, customerRepo)
-	loanService := service.NewLoanService(loanRepo, itemRepo, customerRepo, paymentRepo)
-	paymentService := service.NewPaymentService(paymentRepo, loanRepo, customerRepo)
+	loanService := service.NewLoanService(loanRepo, itemRepo, customerRepo, paymentRepo, log.Logger)
+	paymentService := service.NewPaymentService(paymentRepo, loanRepo, customerRepo, itemRepo, log.Logger)
 	saleService := service.NewSaleService(saleRepo, itemRepo, customerRepo, branchRepo)
 	cashService := service.NewCashService(cashRegisterRepo, cashSessionRepo, cashMovementRepo, branchRepo)
 	branchService := service.NewBranchService(branchRepo)
@@ -141,7 +141,7 @@ func main() {
 
 	// Initialize backup service
 	backupPath := filepath.Join(".", "backups")
-	backupService := service.NewBackupService(&cfg.Database, backupPath)
+	backupService := service.NewBackupService(&cfg.Database, backupPath, log.Logger)
 
 	// Initialize PDF generator
 	pdfGenerator := pdf.NewGenerator(cfg.App.Name, "", "")
@@ -151,12 +151,12 @@ func main() {
 	auditLogger := middleware.NewAuditLogger(auditService)
 
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(authService, auditLogger)
+	authHandler := handler.NewAuthHandler(authService, auditLogger, log.Logger)
 	userHandler := handler.NewUserHandler(userService, auditLogger)
 	customerHandler := handler.NewCustomerHandler(customerService, auditLogger)
 	itemHandler := handler.NewItemHandler(itemService, auditLogger)
-	loanHandler := handler.NewLoanHandler(loanService, auditLogger)
-	paymentHandler := handler.NewPaymentHandler(paymentService, auditLogger)
+	loanHandler := handler.NewLoanHandler(loanService, auditLogger, log.Logger)
+	paymentHandler := handler.NewPaymentHandler(paymentService, auditLogger, log.Logger)
 	saleHandler := handler.NewSaleHandler(saleService, auditLogger)
 	cashHandler := handler.NewCashHandler(cashService)
 	branchHandler := handler.NewBranchHandler(branchService, auditLogger)
@@ -177,7 +177,7 @@ func main() {
 
 	// Initialize middleware
 	loggingMiddleware := middleware.NewLoggingMiddleware(log.Logger)
-	authMiddleware := middleware.NewAuthMiddleware(jwtManager, userRepo, roleRepo)
+	authMiddleware := middleware.NewAuthMiddleware(jwtManager, userRepo, roleRepo, log.Logger)
 	rateLimiter := middleware.NewRateLimiter(middleware.DefaultRateLimitConfig())
 	loginRateLimiter := middleware.NewRateLimiter(middleware.LoginRateLimitConfig())
 

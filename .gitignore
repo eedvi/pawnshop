@@ -46,3 +46,9 @@ api/docs/
 # Debug
 __debug_bin
 .claude/
+
+# image files
+*.png
+*.jpg
+*.jpeg
+*.gif

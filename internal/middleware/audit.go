@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog/log"
 	"pawnshop/internal/service"
 )
 
@@ -13,6 +14,21 @@ type AuditMiddleware struct {
 // NewAuditMiddleware creates a new AuditMiddleware
 func NewAuditMiddleware(auditService *service.AuditService) *AuditMiddleware {
 	return &AuditMiddleware{auditService: auditService}
+}
+
+// safeGo runs a function in a goroutine with panic recovery
+func safeGo(fn func(), operation string) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().
+					Interface("panic", r).
+					Str("operation", operation).
+					Msg("Panic recovered in audit logging goroutine")
+			}
+		}()
+		fn()
+	}()
 }
 
 // LogAction logs an action to the audit log
@@ -32,7 +48,7 @@ func (m *AuditMiddleware) LogAction(action, entityType string, entityID *int64, 
 			}
 
 			// Log the action asynchronously to not block the response
-			go func() {
+			safeGo(func() {
 				m.auditService.LogAction(
 					c.Context(),
 					branchID,
@@ -45,7 +61,7 @@ func (m *AuditMiddleware) LogAction(action, entityType string, entityID *int64, 
 					c.IP(),
 					c.Get("User-Agent"),
 				)
-			}()
+			}, "audit.LogAction")
 		}
 
 		return err
@@ -71,16 +87,18 @@ func (l *AuditLogger) LogCreate(c *fiber.Ctx, entityType string, entityID int64,
 		branchID = user.BranchID
 	}
 
-	go l.auditService.LogCreate(
-		c.Context(),
-		branchID,
-		userID,
-		entityType,
-		entityID,
-		newValues,
-		c.IP(),
-		c.Get("User-Agent"),
-	)
+	safeGo(func() {
+		l.auditService.LogCreate(
+			c.Context(),
+			branchID,
+			userID,
+			entityType,
+			entityID,
+			newValues,
+			c.IP(),
+			c.Get("User-Agent"),
+		)
+	}, "audit.LogCreate")
 }
 
 // LogUpdate logs an update action
@@ -92,17 +110,19 @@ func (l *AuditLogger) LogUpdate(c *fiber.Ctx, entityType string, entityID int64,
 		branchID = user.BranchID
 	}
 
-	go l.auditService.LogUpdate(
-		c.Context(),
-		branchID,
-		userID,
-		entityType,
-		entityID,
-		oldValues,
-		newValues,
-		c.IP(),
-		c.Get("User-Agent"),
-	)
+	safeGo(func() {
+		l.auditService.LogUpdate(
+			c.Context(),
+			branchID,
+			userID,
+			entityType,
+			entityID,
+			oldValues,
+			newValues,
+			c.IP(),
+			c.Get("User-Agent"),
+		)
+	}, "audit.LogUpdate")
 }
 
 // LogDelete logs a delete action
@@ -114,36 +134,42 @@ func (l *AuditLogger) LogDelete(c *fiber.Ctx, entityType string, entityID int64,
 		branchID = user.BranchID
 	}
 
-	go l.auditService.LogDelete(
-		c.Context(),
-		branchID,
-		userID,
-		entityType,
-		entityID,
-		oldValues,
-		c.IP(),
-		c.Get("User-Agent"),
-	)
+	safeGo(func() {
+		l.auditService.LogDelete(
+			c.Context(),
+			branchID,
+			userID,
+			entityType,
+			entityID,
+			oldValues,
+			c.IP(),
+			c.Get("User-Agent"),
+		)
+	}, "audit.LogDelete")
 }
 
 // LogLogin logs a login action
 func (l *AuditLogger) LogLogin(c *fiber.Ctx, userID int64, branchID *int64) {
-	go l.auditService.LogLogin(
-		c.Context(),
-		branchID,
-		&userID,
-		c.IP(),
-		c.Get("User-Agent"),
-	)
+	safeGo(func() {
+		l.auditService.LogLogin(
+			c.Context(),
+			branchID,
+			&userID,
+			c.IP(),
+			c.Get("User-Agent"),
+		)
+	}, "audit.LogLogin")
 }
 
 // LogLogout logs a logout action
 func (l *AuditLogger) LogLogout(c *fiber.Ctx, userID int64, branchID *int64) {
-	go l.auditService.LogLogout(
-		c.Context(),
-		branchID,
-		&userID,
-		c.IP(),
-		c.Get("User-Agent"),
-	)
+	safeGo(func() {
+		l.auditService.LogLogout(
+			c.Context(),
+			branchID,
+			&userID,
+			c.IP(),
+			c.Get("User-Agent"),
+		)
+	}, "audit.LogLogout")
 }

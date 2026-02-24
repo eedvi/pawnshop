@@ -14,26 +14,10 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { itemRoute } from '@/routes/routes'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { useItems } from '@/hooks/use-items'
 
 interface CustomerItemsTabProps {
   customerId: number
-}
-
-// Placeholder - will be replaced with actual hook when Items module is implemented
-function useCustomerItems(_customerId: number) {
-  // TODO: Replace with actual API call
-  return {
-    data: [] as Array<{
-      id: number
-      name: string
-      category_name: string
-      status: string
-      appraised_value: number
-      loan_amount: number
-      created_at: string
-    }>,
-    isLoading: false,
-  }
 }
 
 const ITEM_STATUS_LABELS: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
@@ -47,7 +31,8 @@ const ITEM_STATUS_LABELS: Record<string, { label: string; variant: 'default' | '
 }
 
 export function CustomerItemsTab({ customerId }: CustomerItemsTabProps) {
-  const { data: items, isLoading } = useCustomerItems(customerId)
+  const { data: itemsResponse, isLoading } = useItems({ customer_id: customerId, per_page: 100 })
+  const items = itemsResponse?.data || []
 
   if (isLoading) {
     return (
@@ -95,12 +80,12 @@ export function CustomerItemsTab({ customerId }: CustomerItemsTabProps) {
                 return (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">{item.name}</TableCell>
-                    <TableCell>{item.category_name}</TableCell>
+                    <TableCell>{item.category?.name || '-'}</TableCell>
                     <TableCell>
                       <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
                     </TableCell>
                     <TableCell className="text-right">{formatCurrency(item.appraised_value)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(item.loan_amount)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(item.loan_value)}</TableCell>
                     <TableCell>{formatDate(item.created_at)}</TableCell>
                     <TableCell>
                       <Link

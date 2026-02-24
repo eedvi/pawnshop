@@ -125,7 +125,7 @@ func (s *storageService) UploadImageFromReader(ctx context.Context, reader io.Re
 	return s.uploadFromReader(ctx, reader, filename, mimeType, ext, category, 0)
 }
 
-func (s *storageService) uploadFromReader(ctx context.Context, reader io.Reader, originalName, mimeType, ext, category string, size int64) (*ImageInfo, error) {
+func (s *storageService) uploadFromReader(_ context.Context, reader io.Reader, originalName, mimeType, ext, category string, size int64) (*ImageInfo, error) {
 	// Generate unique ID
 	id := uuid.New().String()
 	filename := id + ext
@@ -202,7 +202,7 @@ func (s *storageService) GetThumbnail(ctx context.Context, id string) (io.ReadCl
 	return s.getFile(ctx, "thumbnails", id)
 }
 
-func (s *storageService) getFile(ctx context.Context, subdir, id string) (io.ReadCloser, *ImageInfo, error) {
+func (s *storageService) getFile(_ context.Context, subdir, id string) (io.ReadCloser, *ImageInfo, error) {
 	// Security check
 	if strings.Contains(id, "..") {
 		return nil, nil, fmt.Errorf("invalid file ID")

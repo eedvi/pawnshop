@@ -115,7 +115,7 @@ func (r *LoanRepository) List(ctx context.Context, params repository.LoanListPar
 
 	if params.Search != "" {
 		argCount++
-		baseQuery += fmt.Sprintf(" AND l.loan_number ILIKE $%d", argCount)
+		baseQuery += fmt.Sprintf(" AND (l.loan_number ILIKE $%d OR c.first_name ILIKE $%d OR c.last_name ILIKE $%d OR c.identity_number ILIKE $%d OR i.name ILIKE $%d)", argCount, argCount, argCount, argCount, argCount)
 		args = append(args, "%"+params.Search+"%")
 	}
 

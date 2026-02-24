@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+	"pawnshop/pkg/logger"
 )
 
 // LoggingMiddleware handles request logging
@@ -29,6 +30,10 @@ func (m *LoggingMiddleware) Logger() fiber.Handler {
 			requestID = uuid.New().String()
 		}
 		c.Set("X-Request-ID", requestID)
+
+		// Inject request ID into context for services
+		ctx := logger.WithRequestID(c.Context(), requestID)
+		c.SetUserContext(ctx)
 
 		// Process request
 		err := c.Next()

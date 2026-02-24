@@ -14,27 +14,11 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { loanRoute } from '@/routes/routes'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { useLoans } from '@/hooks/use-loans'
+import { calculateRemainingBalance } from '@/types/loan'
 
 interface CustomerLoansTabProps {
   customerId: number
-}
-
-// Placeholder - will be replaced with actual hook when Loans module is implemented
-function useCustomerLoans(_customerId: number) {
-  // TODO: Replace with actual API call
-  return {
-    data: [] as Array<{
-      id: number
-      loan_number: string
-      status: string
-      principal_amount: number
-      total_paid: number
-      balance: number
-      due_date: string
-      created_at: string
-    }>,
-    isLoading: false,
-  }
 }
 
 const LOAN_STATUS_LABELS: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
@@ -46,7 +30,8 @@ const LOAN_STATUS_LABELS: Record<string, { label: string; variant: 'default' | '
 }
 
 export function CustomerLoansTab({ customerId }: CustomerLoansTabProps) {
-  const { data: loans, isLoading } = useCustomerLoans(customerId)
+  const { data: loansResponse, isLoading } = useLoans({ customer_id: customerId, per_page: 100 })
+  const loans = loansResponse?.data || []
 
   if (isLoading) {
     return (
@@ -98,9 +83,9 @@ export function CustomerLoansTab({ customerId }: CustomerLoansTabProps) {
                     <TableCell>
                       <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
                     </TableCell>
-                    <TableCell className="text-right">{formatCurrency(loan.principal_amount)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(loan.total_paid)}</TableCell>
-                    <TableCell className="text-right font-medium">{formatCurrency(loan.balance)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(loan.loan_amount)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(loan.amount_paid)}</TableCell>
+                    <TableCell className="text-right font-medium">{formatCurrency(calculateRemainingBalance(loan))}</TableCell>
                     <TableCell>{formatDate(loan.due_date)}</TableCell>
                     <TableCell>{formatDate(loan.created_at)}</TableCell>
                     <TableCell>

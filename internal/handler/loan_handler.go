@@ -4,10 +4,12 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog"
 	"pawnshop/internal/domain"
 	"pawnshop/internal/middleware"
 	"pawnshop/internal/repository"
 	"pawnshop/internal/service"
+	"pawnshop/pkg/logger"
 	"pawnshop/pkg/response"
 	"pawnshop/pkg/validator"
 )
@@ -16,17 +18,25 @@ import (
 type LoanHandler struct {
 	loanService *service.LoanService
 	auditLogger *middleware.AuditLogger
+	logger      zerolog.Logger
 }
 
 // NewLoanHandler creates a new LoanHandler
-func NewLoanHandler(loanService *service.LoanService, auditLogger *middleware.AuditLogger) *LoanHandler {
-	return &LoanHandler{loanService: loanService, auditLogger: auditLogger}
+func NewLoanHandler(loanService *service.LoanService, auditLogger *middleware.AuditLogger, logger zerolog.Logger) *LoanHandler {
+	return &LoanHandler{
+		loanService: loanService,
+		auditLogger: auditLogger,
+		logger:      logger.With().Str("handler", "loan").Logger(),
+	}
 }
 
 // Create handles loan creation
 func (h *LoanHandler) Create(c *fiber.Ctx) error {
+	log := logger.FromContext(c.UserContext(), h.logger)
+
 	var input service.CreateLoanInput
 	if err := c.BodyParser(&input); err != nil {
+		log.Warn().Err(err).Msg("Failed to parse loan request body")
 		return response.BadRequest(c, "Error parsing request body: "+err.Error())
 	}
 
@@ -39,13 +49,24 @@ func (h *LoanHandler) Create(c *fiber.Ctx) error {
 
 	// Validate
 	if errors := validator.Validate(&input); errors != nil {
+		log.Warn().Interface("validation_errors", errors).Msg("Loan validation failed")
 		return response.ValidationError(c, errors)
 	}
 
+	// Service layer handles detailed logging
 	loan, err := h.loanService.Create(c.Context(), input)
 	if err != nil {
+		// Service already logged the error
 		return response.BadRequest(c, err.Error())
 	}
+
+	log.Info().
+		Int64("loan_id", loan.ID).
+		Str("loan_number", loan.LoanNumber).
+		Int64("customer_id", input.CustomerID).
+		Int64("item_id", input.ItemID).
+		Float64("loan_amount", input.LoanAmount).
+		Msg("Loan created successfully at handler level")
 
 	return response.Created(c, loan)
 }

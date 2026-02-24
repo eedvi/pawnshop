@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/rs/zerolog"
 	"pawnshop/internal/domain"
 	"pawnshop/internal/repository"
 )
@@ -15,6 +16,8 @@ type PaymentService struct {
 	paymentRepo  repository.PaymentRepository
 	loanRepo     repository.LoanRepository
 	customerRepo repository.CustomerRepository
+	itemRepo     repository.ItemRepository
+	logger       zerolog.Logger
 }
 
 // NewPaymentService creates a new PaymentService
@@ -22,11 +25,15 @@ func NewPaymentService(
 	paymentRepo repository.PaymentRepository,
 	loanRepo repository.LoanRepository,
 	customerRepo repository.CustomerRepository,
+	itemRepo repository.ItemRepository,
+	logger zerolog.Logger,
 ) *PaymentService {
 	return &PaymentService{
 		paymentRepo:  paymentRepo,
 		loanRepo:     loanRepo,
 		customerRepo: customerRepo,
+		itemRepo:     itemRepo,
+		logger:       logger.With().Str("service", "payment").Logger(),
 	}
 }
 
@@ -52,17 +59,27 @@ type PaymentResult struct {
 
 // Create creates a new payment and applies it to the loan
 func (s *PaymentService) Create(ctx context.Context, input CreatePaymentInput) (*PaymentResult, error) {
+	s.logger.Info().
+		Int64("loan_id", input.LoanID).
+		Float64("amount", input.Amount).
+		Str("payment_method", input.PaymentMethod).
+		Int64("created_by", input.CreatedBy).
+		Msg("Processing payment")
+
 	// Get loan
 	loan, err := s.loanRepo.GetByID(ctx, input.LoanID)
 	if err != nil {
+		s.logger.Error().Err(err).Int64("loan_id", input.LoanID).Msg("Loan not found")
 		return nil, errors.New("loan not found")
 	}
 
 	// Validate loan can receive payments
 	if loan.Status == domain.LoanStatusPaid {
+		s.logger.Warn().Int64("loan_id", input.LoanID).Msg("Payment rejected: loan already fully paid")
 		return nil, errors.New("loan is already fully paid")
 	}
 	if loan.Status == domain.LoanStatusConfiscated {
+		s.logger.Warn().Int64("loan_id", input.LoanID).Msg("Payment rejected: loan confiscated")
 		return nil, errors.New("loan has been confiscated")
 	}
 
@@ -158,6 +175,16 @@ func (s *PaymentService) Create(ctx context.Context, input CreatePaymentInput) (
 		return nil, fmt.Errorf("failed to update loan: %w", err)
 	}
 
+	// Update item status to available if loan is fully paid
+	if isFullyPaid {
+		if err := s.itemRepo.UpdateStatus(ctx, loan.ItemID, domain.ItemStatusAvailable); err != nil {
+			s.logger.Error().Err(err).Int64("item_id", loan.ItemID).Msg("Failed to update item status to available")
+			// Don't fail the payment, but log the error
+		} else {
+			s.logger.Info().Int64("item_id", loan.ItemID).Msg("Item returned to customer (status: available)")
+		}
+	}
+
 	// Apply payment to installments if loan has installment payment plan
 	if loan.PaymentPlanType == "installments" {
 		if err := s.applyPaymentToInstallments(ctx, loan, input.Amount); err != nil {
@@ -166,16 +193,26 @@ func (s *PaymentService) Create(ctx context.Context, input CreatePaymentInput) (
 		}
 	}
 
-	// Update customer stats if fully paid
-	if isFullyPaid {
-		customer, _ := s.customerRepo.GetByID(ctx, loan.CustomerID)
-		if customer != nil {
-			totalPaid := customer.TotalPaid + loan.AmountPaid
-			s.customerRepo.UpdateCreditInfo(ctx, customer.ID, repository.CustomerCreditUpdate{
-				TotalPaid: &totalPaid,
-			})
-		}
+	// Update customer total_paid stats with every payment
+	customer, _ := s.customerRepo.GetByID(ctx, loan.CustomerID)
+	if customer != nil {
+		totalPaid := customer.TotalPaid + input.Amount
+		s.customerRepo.UpdateCreditInfo(ctx, customer.ID, repository.CustomerCreditUpdate{
+			TotalPaid: &totalPaid,
+		})
 	}
+
+	s.logger.Info().
+		Int64("payment_id", payment.ID).
+		Str("payment_number", payment.PaymentNumber).
+		Int64("loan_id", loan.ID).
+		Float64("amount", input.Amount).
+		Float64("principal_paid", principalPayment).
+		Float64("interest_paid", interestPayment).
+		Float64("late_fee_paid", lateFeePayment).
+		Float64("remaining_balance", loan.RemainingBalance()).
+		Bool("fully_paid", isFullyPaid).
+		Msg("Payment processed successfully")
 
 	return &PaymentResult{
 		Payment:          payment,
@@ -231,8 +268,11 @@ func (s *PaymentService) Reverse(ctx context.Context, input ReversePaymentInput)
 		return nil, errors.New("loan not found")
 	}
 
+	// Check if loan was paid off before reversal
+	wasPaid := loan.Status == domain.LoanStatusPaid
+
 	// If loan was paid off, reactivate it
-	if loan.Status == domain.LoanStatusPaid {
+	if wasPaid {
 		loan.Status = domain.LoanStatusActive
 		loan.PaidDate = nil
 	}
@@ -249,11 +289,33 @@ func (s *PaymentService) Reverse(ctx context.Context, input ReversePaymentInput)
 		return nil, fmt.Errorf("failed to update loan: %w", err)
 	}
 
+	// Update item status back to collateral if loan was paid and is being reactivated
+	if wasPaid {
+		if err := s.itemRepo.UpdateStatus(ctx, loan.ItemID, domain.ItemStatusCollateral); err != nil {
+			s.logger.Error().Err(err).Int64("item_id", loan.ItemID).Msg("Failed to update item status to collateral")
+			// Don't fail the reversal, but log the error
+		} else {
+			s.logger.Info().Int64("item_id", loan.ItemID).Msg("Item returned to collateral status due to payment reversal")
+		}
+	}
+
 	// Reverse payment from installments if loan has installment payment plan
 	if loan.PaymentPlanType == "installments" {
 		if err := s.reversePaymentFromInstallments(ctx, loan, payment.Amount); err != nil {
 			// Log error but don't fail the reversal
 		}
+	}
+
+	// Update customer total_paid stats (subtract reversed amount)
+	customer, _ := s.customerRepo.GetByID(ctx, payment.CustomerID)
+	if customer != nil {
+		totalPaid := customer.TotalPaid - payment.Amount
+		if totalPaid < 0 {
+			totalPaid = 0
+		}
+		s.customerRepo.UpdateCreditInfo(ctx, customer.ID, repository.CustomerCreditUpdate{
+			TotalPaid: &totalPaid,
+		})
 	}
 
 	// Mark payment as reversed

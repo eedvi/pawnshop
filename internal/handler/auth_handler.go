@@ -2,8 +2,10 @@ package handler
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog"
 	"pawnshop/internal/middleware"
 	"pawnshop/internal/service"
+	"pawnshop/pkg/logger"
 	"pawnshop/pkg/response"
 	"pawnshop/pkg/validator"
 )
@@ -12,11 +14,16 @@ import (
 type AuthHandler struct {
 	authService *service.AuthService
 	auditLogger *middleware.AuditLogger
+	logger      zerolog.Logger
 }
 
 // NewAuthHandler creates a new AuthHandler
-func NewAuthHandler(authService *service.AuthService, auditLogger *middleware.AuditLogger) *AuthHandler {
-	return &AuthHandler{authService: authService, auditLogger: auditLogger}
+func NewAuthHandler(authService *service.AuthService, auditLogger *middleware.AuditLogger, logger zerolog.Logger) *AuthHandler {
+	return &AuthHandler{
+		authService: authService,
+		auditLogger: auditLogger,
+		logger:      logger.With().Str("handler", "auth").Logger(),
+	}
 }
 
 // Login handles user login
@@ -31,22 +38,27 @@ func NewAuthHandler(authService *service.AuthService, auditLogger *middleware.Au
 // @Failure 401 {object} response.Response
 // @Router /api/v1/auth/login [post]
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
+	log := logger.FromContext(c.UserContext(), h.logger)
+
 	var input service.LoginInput
 	if err := c.BodyParser(&input); err != nil {
+		log.Warn().Err(err).Msg("Failed to parse login request body")
 		return response.BadRequest(c, "Error parsing request body: "+err.Error())
 	}
 
 	// Validate input
 	if errors := validator.Validate(&input); errors != nil {
+		log.Warn().Interface("validation_errors", errors).Msg("Login validation failed")
 		return response.ValidationError(c, errors)
 	}
 
 	// Get client IP
 	ip := c.IP()
 
-	// Login
+	// Login (service layer handles detailed logging)
 	output, err := h.authService.Login(c.Context(), input, ip)
 	if err != nil {
+		// Service already logged the error with details
 		return response.Unauthorized(c, err.Error())
 	}
 
@@ -54,6 +66,11 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	if h.auditLogger != nil {
 		h.auditLogger.LogLogin(c, output.User.ID, output.User.BranchID)
 	}
+
+	log.Info().
+		Int64("user_id", output.User.ID).
+		Str("email", output.User.Email).
+		Msg("Login successful at handler level")
 
 	return response.OK(c, output)
 }

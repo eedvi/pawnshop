@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/rs/zerolog"
 	"pawnshop/internal/domain"
 	"pawnshop/internal/repository"
 )
@@ -16,6 +17,7 @@ type LoanService struct {
 	itemRepo     repository.ItemRepository
 	customerRepo repository.CustomerRepository
 	paymentRepo  repository.PaymentRepository
+	logger       zerolog.Logger
 }
 
 // NewLoanService creates a new LoanService
@@ -24,12 +26,14 @@ func NewLoanService(
 	itemRepo repository.ItemRepository,
 	customerRepo repository.CustomerRepository,
 	paymentRepo repository.PaymentRepository,
+	logger zerolog.Logger,
 ) *LoanService {
 	return &LoanService{
 		loanRepo:     loanRepo,
 		itemRepo:     itemRepo,
 		customerRepo: customerRepo,
 		paymentRepo:  paymentRepo,
+		logger:       logger.With().Str("service", "loan").Logger(),
 	}
 }
 
@@ -53,26 +57,52 @@ type CreateLoanInput struct {
 
 // Create creates a new loan
 func (s *LoanService) Create(ctx context.Context, input CreateLoanInput) (*domain.Loan, error) {
+	s.logger.Info().
+		Int64("customer_id", input.CustomerID).
+		Int64("item_id", input.ItemID).
+		Float64("loan_amount", input.LoanAmount).
+		Float64("interest_rate", input.InterestRate).
+		Int("loan_term_days", input.LoanTermDays).
+		Str("payment_plan_type", input.PaymentPlanType).
+		Int64("created_by", input.CreatedBy).
+		Msg("Creating new loan")
+
 	// Validate customer exists and can take loan
 	customer, err := s.customerRepo.GetByID(ctx, input.CustomerID)
 	if err != nil {
+		s.logger.Error().Err(err).Int64("customer_id", input.CustomerID).Msg("Customer not found")
 		return nil, errors.New("customer not found")
 	}
 	if !customer.CanTakeLoan() {
+		s.logger.Warn().
+			Int64("customer_id", input.CustomerID).
+			Bool("is_active", customer.IsActive).
+			Bool("is_blocked", customer.IsBlocked).
+			Msg("Loan rejected: customer cannot take loans")
 		return nil, errors.New("customer cannot take loans")
 	}
 
 	// Validate item exists and is available
 	item, err := s.itemRepo.GetByID(ctx, input.ItemID)
 	if err != nil {
+		s.logger.Error().Err(err).Int64("item_id", input.ItemID).Msg("Item not found")
 		return nil, errors.New("item not found")
 	}
 	if !item.IsAvailable() {
+		s.logger.Warn().
+			Int64("item_id", input.ItemID).
+			Str("status", string(item.Status)).
+			Msg("Loan rejected: item not available")
 		return nil, errors.New("item is not available for loan")
 	}
 
 	// Validate loan amount doesn't exceed item loan value
 	if input.LoanAmount > item.LoanValue {
+		s.logger.Warn().
+			Int64("item_id", input.ItemID).
+			Float64("requested_amount", input.LoanAmount).
+			Float64("max_loan_value", item.LoanValue).
+			Msg("Loan rejected: amount exceeds item loan value")
 		return nil, errors.New("loan amount cannot exceed item loan value")
 	}
 
@@ -83,6 +113,7 @@ func (s *LoanService) Create(ctx context.Context, input CreateLoanInput) (*domai
 	// Generate loan number
 	loanNumber, err := s.loanRepo.GenerateNumber(ctx)
 	if err != nil {
+		s.logger.Error().Err(err).Msg("Failed to generate loan number")
 		return nil, fmt.Errorf("failed to generate loan number: %w", err)
 	}
 
@@ -138,17 +169,20 @@ func (s *LoanService) Create(ctx context.Context, input CreateLoanInput) (*domai
 	// Start transaction
 	tx, err := s.loanRepo.BeginTx(ctx)
 	if err != nil {
+		s.logger.Error().Err(err).Msg("Failed to start transaction")
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback()
 
 	// Create loan
 	if err := s.loanRepo.CreateTx(ctx, tx, loan); err != nil {
+		s.logger.Error().Err(err).Str("loan_number", loanNumber).Msg("Failed to create loan")
 		return nil, fmt.Errorf("failed to create loan: %w", err)
 	}
 
 	// Update item status to collateral
 	if err := s.itemRepo.UpdateStatus(ctx, item.ID, domain.ItemStatusCollateral); err != nil {
+		s.logger.Error().Err(err).Int64("item_id", item.ID).Msg("Failed to update item status")
 		return nil, fmt.Errorf("failed to update item status: %w", err)
 	}
 
@@ -156,11 +190,16 @@ func (s *LoanService) Create(ctx context.Context, input CreateLoanInput) (*domai
 	if input.PaymentPlanType == "installments" && input.NumberOfInstallments > 0 {
 		installments := s.calculateInstallments(loan, input.NumberOfInstallments)
 		if err := s.loanRepo.CreateInstallmentsTx(ctx, tx, installments); err != nil {
+			s.logger.Error().Err(err).
+				Str("loan_number", loanNumber).
+				Int("num_installments", input.NumberOfInstallments).
+				Msg("Failed to create installments")
 			return nil, fmt.Errorf("failed to create installments: %w", err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
+		s.logger.Error().Err(err).Str("loan_number", loanNumber).Msg("Failed to commit transaction")
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
@@ -173,6 +212,17 @@ func (s *LoanService) Create(ctx context.Context, input CreateLoanInput) (*domai
 	// Load relations
 	loan.Customer = customer
 	loan.Item = item
+
+	s.logger.Info().
+		Int64("loan_id", loan.ID).
+		Str("loan_number", loan.LoanNumber).
+		Int64("customer_id", input.CustomerID).
+		Int64("item_id", input.ItemID).
+		Float64("loan_amount", input.LoanAmount).
+		Float64("interest_amount", interestAmount).
+		Float64("total_amount", totalAmount).
+		Str("due_date", dueDate.Format("2006-01-02")).
+		Msg("Loan created successfully")
 
 	return loan, nil
 }
