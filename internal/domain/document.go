@@ -56,9 +56,10 @@ type AuditLog struct {
 	UserID   *int64 `json:"user_id,omitempty"`
 
 	// Action details
-	Action     string `json:"action"`
-	EntityType string `json:"entity_type"`
-	EntityID   *int64 `json:"entity_id,omitempty"`
+	Action      string  `json:"action"`
+	EntityType  string  `json:"entity_type"`
+	EntityID    *int64  `json:"entity_id,omitempty"`
+	Description *string `json:"description,omitempty"`
 
 	// Data
 	OldValues interface{} `json:"old_values,omitempty"`
@@ -69,8 +70,10 @@ type AuditLog struct {
 	// Timestamps
 	CreatedAt time.Time `json:"created_at"`
 
-	// Relations
-	User *User `json:"user,omitempty"`
+	// Relations (populated from JOINs, not from foreign keys)
+	User       *User   `json:"user,omitempty"`
+	UserName   *string `json:"user_name,omitempty"`
+	BranchName *string `json:"branch_name,omitempty"`
 }
 
 // TableName returns the database table name

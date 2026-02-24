@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -44,6 +45,18 @@ func (h *CustomerHandler) Create(c *fiber.Ctx) error {
 	customer, err := h.customerService.Create(c.Context(), input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil {
+		description := fmt.Sprintf("Cliente '%s %s' creado (DPI: %s)", input.FirstName, input.LastName, input.IdentityNumber)
+		h.auditLogger.LogCreateWithDescription(c, "customer", customer.ID, description, fiber.Map{
+			"first_name":      input.FirstName,
+			"last_name":       input.LastName,
+			"identity_number": input.IdentityNumber,
+			"phone":           input.Phone,
+			"email":           input.Email,
+		})
 	}
 
 	return response.Created(c, customer)
@@ -120,9 +133,33 @@ func (h *CustomerHandler) Update(c *fiber.Ctx) error {
 		return response.ValidationError(c, errors)
 	}
 
+	// Get original customer for audit
+	originalCustomer, _ := h.customerService.GetByID(c.Context(), id)
+
 	customer, err := h.customerService.Update(c.Context(), id, input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalCustomer != nil {
+		description := fmt.Sprintf("Cliente '%s %s' actualizado", customer.FirstName, customer.LastName)
+
+		oldValues := fiber.Map{
+			"first_name": originalCustomer.FirstName,
+			"last_name":  originalCustomer.LastName,
+			"phone":      originalCustomer.Phone,
+			"email":      originalCustomer.Email,
+		}
+
+		newValues := fiber.Map{
+			"first_name": input.FirstName,
+			"last_name":  input.LastName,
+			"phone":      input.Phone,
+			"email":      input.Email,
+		}
+
+		h.auditLogger.LogUpdateWithDescription(c, "customer", id, description, oldValues, newValues)
 	}
 
 	return response.OK(c, customer)
@@ -135,8 +172,23 @@ func (h *CustomerHandler) Delete(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid customer ID format")
 	}
 
+	// Get customer before deleting for audit
+	customer, _ := h.customerService.GetByID(c.Context(), id)
+
 	if err := h.customerService.Delete(c.Context(), id); err != nil {
 		return response.NotFound(c, "Customer not found")
+	}
+
+	// Audit log
+	if h.auditLogger != nil && customer != nil {
+		description := fmt.Sprintf("Cliente '%s %s' eliminado (DPI: %s)", customer.FirstName, customer.LastName, customer.IdentityNumber)
+		h.auditLogger.LogDeleteWithDescription(c, "customer", id, description, fiber.Map{
+			"first_name":      customer.FirstName,
+			"last_name":       customer.LastName,
+			"identity_number": customer.IdentityNumber,
+			"phone":           customer.Phone,
+			"email":           customer.Email,
+		})
 	}
 
 	return response.NoContent(c)
@@ -160,12 +212,29 @@ func (h *CustomerHandler) Block(c *fiber.Ctx) error {
 		return response.ValidationError(c, errors)
 	}
 
+	// Get customer for audit
+	customer, _ := h.customerService.GetByID(c.Context(), id)
+
 	err = h.customerService.Block(c.Context(), service.BlockCustomerInput{
 		CustomerID: id,
 		Reason:     input.Reason,
 	})
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && customer != nil {
+		description := fmt.Sprintf("Cliente '%s %s' bloqueado. Razón: %s", customer.FirstName, customer.LastName, input.Reason)
+		h.auditLogger.LogCustomAction(c, "block", "customer", id, description,
+			fiber.Map{
+				"is_blocked": customer.IsBlocked,
+			},
+			fiber.Map{
+				"is_blocked":   true,
+				"blocked_at":   "now",
+				"block_reason": input.Reason,
+			})
 	}
 
 	return response.OK(c, fiber.Map{"message": "Customer blocked successfully"})
@@ -178,8 +247,24 @@ func (h *CustomerHandler) Unblock(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid customer ID format")
 	}
 
+	// Get customer for audit
+	customer, _ := h.customerService.GetByID(c.Context(), id)
+
 	if err := h.customerService.Unblock(c.Context(), id); err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && customer != nil {
+		description := fmt.Sprintf("Cliente '%s %s' desbloqueado", customer.FirstName, customer.LastName)
+		h.auditLogger.LogCustomAction(c, "unblock", "customer", id, description,
+			fiber.Map{
+				"is_blocked": customer.IsBlocked,
+			},
+			fiber.Map{
+				"is_blocked":   false,
+				"unblocked_at": "now",
+			})
 	}
 
 	return response.OK(c, fiber.Map{"message": "Customer unblocked successfully"})

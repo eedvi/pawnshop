@@ -60,10 +60,36 @@ func (h *AuditHandler) List(c *fiber.Ctx) error {
 	return response.Paginated(c, result.Data, result.Page, result.PerPage, result.Total)
 }
 
+// GetStats retrieves audit statistics
+func (h *AuditHandler) GetStats(c *fiber.Ctx) error {
+	params := repository.AuditLogListParams{}
+
+	// Parse optional filters
+	if branchID := c.QueryInt("branch_id", 0); branchID > 0 {
+		id := int64(branchID)
+		params.BranchID = &id
+	}
+
+	if dateFrom := c.Query("date_from"); dateFrom != "" {
+		params.DateFrom = &dateFrom
+	}
+	if dateTo := c.Query("date_to"); dateTo != "" {
+		params.DateTo = &dateTo
+	}
+
+	stats, err := h.auditService.GetStats(c.Context(), params)
+	if err != nil {
+		return response.InternalError(c, "")
+	}
+
+	return response.OK(c, stats)
+}
+
 // RegisterRoutes registers audit log routes
 func (h *AuditHandler) RegisterRoutes(app fiber.Router, authMiddleware *middleware.AuthMiddleware) {
 	audit := app.Group("/audit")
 	audit.Use(authMiddleware.Authenticate())
 
 	audit.Get("/", authMiddleware.RequirePermission("audit.read"), h.List)
+	audit.Get("/stats", authMiddleware.RequirePermission("audit.read"), h.GetStats)
 }

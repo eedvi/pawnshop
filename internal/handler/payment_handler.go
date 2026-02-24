@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -67,6 +68,21 @@ func (h *PaymentHandler) Create(c *fiber.Ctx) error {
 		Float64("amount", input.Amount).
 		Bool("fully_paid", result.IsFullyPaid).
 		Msg("Payment created successfully at handler level")
+
+	// Audit log
+	if h.auditLogger != nil {
+		description := fmt.Sprintf("Pago #%s creado por Q%.2f en préstamo #%d", result.Payment.PaymentNumber, input.Amount, input.LoanID)
+		if result.IsFullyPaid {
+			description += " (préstamo totalmente pagado)"
+		}
+		h.auditLogger.LogCreateWithDescription(c, "payment", result.Payment.ID, description, fiber.Map{
+			"payment_number": result.Payment.PaymentNumber,
+			"loan_id":        input.LoanID,
+			"amount":         input.Amount,
+			"payment_method": input.PaymentMethod,
+			"fully_paid":     result.IsFullyPaid,
+		})
+	}
 
 	return response.Created(c, result)
 }
@@ -158,6 +174,10 @@ func (h *PaymentHandler) Reverse(c *fiber.Ctx) error {
 	}
 
 	user := middleware.GetUser(c)
+
+	// Get payment before reversing for audit
+	originalPayment, _ := h.paymentService.GetByID(c.Context(), id)
+
 	payment, err := h.paymentService.Reverse(c.Context(), service.ReversePaymentInput{
 		PaymentID:  id,
 		Reason:     input.Reason,
@@ -165,6 +185,22 @@ func (h *PaymentHandler) Reverse(c *fiber.Ctx) error {
 	})
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalPayment != nil {
+		description := fmt.Sprintf("Pago #%s reversado por Q%.2f. Razón: %s", originalPayment.PaymentNumber, originalPayment.Amount, input.Reason)
+		h.auditLogger.LogCustomAction(c, "reverse", "payment", id, description,
+			fiber.Map{
+				"status":         originalPayment.Status,
+				"amount":         originalPayment.Amount,
+				"payment_number": originalPayment.PaymentNumber,
+			},
+			fiber.Map{
+				"status":      payment.Status,
+				"reversed_at": payment.ReversedAt,
+				"reason":      input.Reason,
+			})
 	}
 
 	return response.OK(c, payment)

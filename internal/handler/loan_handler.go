@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -67,6 +68,20 @@ func (h *LoanHandler) Create(c *fiber.Ctx) error {
 		Int64("item_id", input.ItemID).
 		Float64("loan_amount", input.LoanAmount).
 		Msg("Loan created successfully at handler level")
+
+	// Audit log
+	if h.auditLogger != nil {
+		description := fmt.Sprintf("Préstamo #%s creado por Q%.2f a %d días", loan.LoanNumber, input.LoanAmount, input.LoanTermDays)
+		h.auditLogger.LogCreateWithDescription(c, "loan", loan.ID, description, fiber.Map{
+			"loan_number":   loan.LoanNumber,
+			"customer_id":   input.CustomerID,
+			"item_id":       input.ItemID,
+			"loan_amount":   input.LoanAmount,
+			"interest_rate": input.InterestRate,
+			"term_days":     input.LoanTermDays,
+			"due_date":      loan.DueDate,
+		})
+	}
 
 	return response.Created(c, loan)
 }
@@ -218,9 +233,31 @@ func (h *LoanHandler) Renew(c *fiber.Ctx) error {
 		return response.ValidationError(c, errors)
 	}
 
+	// Get original loan for audit
+	originalLoan, _ := h.loanService.GetByID(c.Context(), id)
+
 	loan, err := h.loanService.Renew(c.Context(), input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalLoan != nil {
+		description := fmt.Sprintf("Préstamo #%s renovado por %d días", originalLoan.LoanNumber, input.NewTermDays)
+		if input.PayInterest {
+			description += " con pago de interés"
+		}
+		h.auditLogger.LogCustomAction(c, "renew", "loan", id, description,
+			fiber.Map{
+				"old_due_date": originalLoan.DueDate,
+				"old_status":   originalLoan.Status,
+			},
+			fiber.Map{
+				"new_due_date":      loan.DueDate,
+				"new_term_days":     input.NewTermDays,
+				"pay_interest":      input.PayInterest,
+				"new_interest_rate": input.NewInterestRate,
+			})
 	}
 
 	return response.OK(c, loan)
@@ -238,10 +275,32 @@ func (h *LoanHandler) Confiscate(c *fiber.Ctx) error {
 	}
 	c.BodyParser(&input)
 
+	// Get loan before confiscating for audit
+	originalLoan, _ := h.loanService.GetByID(c.Context(), id)
+
 	user := middleware.GetUser(c)
 	err = h.loanService.Confiscate(c.Context(), id, user.ID, input.Notes)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalLoan != nil {
+		description := fmt.Sprintf("Préstamo #%s confiscado. Artículo pasó a propiedad de la casa de empeño", originalLoan.LoanNumber)
+		if input.Notes != "" {
+			description += fmt.Sprintf(". Notas: %s", input.Notes)
+		}
+		h.auditLogger.LogCustomAction(c, "confiscate", "loan", id, description,
+			fiber.Map{
+				"status":      originalLoan.Status,
+				"item_id":     originalLoan.ItemID,
+				"loan_number": originalLoan.LoanNumber,
+			},
+			fiber.Map{
+				"status":         domain.LoanStatusConfiscated,
+				"confiscated_at": "now",
+				"notes":          input.Notes,
+			})
 	}
 
 	return response.OK(c, fiber.Map{"message": "Loan confiscated successfully"})

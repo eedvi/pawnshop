@@ -66,3 +66,18 @@ export const ENTITY_TYPES = [
   'notification',
   'setting',
 ]
+
+export interface TopUserStat {
+  user_id: number
+  user_name: string
+  count: number
+}
+
+export interface AuditStats {
+  total_actions: number
+  actions_by_type: Record<string, number>
+  actions_by_entity: Record<string, number>
+  active_users: number
+  top_users: TopUserStat[]
+  recent_critical: AuditLog[]
+}

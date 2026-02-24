@@ -173,3 +173,107 @@ func (l *AuditLogger) LogLogout(c *fiber.Ctx, userID int64, branchID *int64) {
 		)
 	}, "audit.LogLogout")
 }
+
+// LogCreateWithDescription logs a create action with description
+func (l *AuditLogger) LogCreateWithDescription(c *fiber.Ctx, entityType string, entityID int64, description string, newValues interface{}) {
+	user := GetUser(c)
+	var userID, branchID *int64
+	if user != nil {
+		userID = &user.ID
+		branchID = user.BranchID
+	}
+
+	safeGo(func() {
+		l.auditService.LogActionWithDescription(
+			c.Context(),
+			branchID,
+			userID,
+			"create",
+			entityType,
+			&entityID,
+			description,
+			nil,
+			newValues,
+			c.IP(),
+			c.Get("User-Agent"),
+		)
+	}, "audit.LogCreateWithDescription")
+}
+
+// LogUpdateWithDescription logs an update action with description
+func (l *AuditLogger) LogUpdateWithDescription(c *fiber.Ctx, entityType string, entityID int64, description string, oldValues, newValues interface{}) {
+	user := GetUser(c)
+	var userID, branchID *int64
+	if user != nil {
+		userID = &user.ID
+		branchID = user.BranchID
+	}
+
+	safeGo(func() {
+		l.auditService.LogActionWithDescription(
+			c.Context(),
+			branchID,
+			userID,
+			"update",
+			entityType,
+			&entityID,
+			description,
+			oldValues,
+			newValues,
+			c.IP(),
+			c.Get("User-Agent"),
+		)
+	}, "audit.LogUpdateWithDescription")
+}
+
+// LogDeleteWithDescription logs a delete action with description
+func (l *AuditLogger) LogDeleteWithDescription(c *fiber.Ctx, entityType string, entityID int64, description string, oldValues interface{}) {
+	user := GetUser(c)
+	var userID, branchID *int64
+	if user != nil {
+		userID = &user.ID
+		branchID = user.BranchID
+	}
+
+	safeGo(func() {
+		l.auditService.LogActionWithDescription(
+			c.Context(),
+			branchID,
+			userID,
+			"delete",
+			entityType,
+			&entityID,
+			description,
+			oldValues,
+			nil,
+			c.IP(),
+			c.Get("User-Agent"),
+		)
+	}, "audit.LogDeleteWithDescription")
+}
+
+// LogCustomAction logs a custom action with description
+func (l *AuditLogger) LogCustomAction(c *fiber.Ctx, action, entityType string, entityID int64, description string, oldValues, newValues interface{}) {
+	user := GetUser(c)
+	var userID, branchID *int64
+	if user != nil {
+		userID = &user.ID
+		branchID = user.BranchID
+	}
+
+	safeGo(func() {
+		l.auditService.LogActionWithDescription(
+			c.Context(),
+			branchID,
+			userID,
+			action,
+			entityType,
+			&entityID,
+			description,
+			oldValues,
+			newValues,
+			c.IP(),
+			c.Get("User-Agent"),
+		)
+	}, "audit.LogCustomAction")
+}

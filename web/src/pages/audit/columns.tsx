@@ -1,10 +1,23 @@
 import { ColumnDef } from '@tanstack/react-table'
-import { Eye } from 'lucide-react'
+import { Eye, ExternalLink } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 import { AuditLog, AUDIT_ACTIONS } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatDateTime } from '@/lib/format'
+import {
+  customerRoute,
+  itemRoute,
+  loanRoute,
+  paymentRoute,
+  saleRoute,
+  userRoute,
+  branchRoute,
+  expenseRoute,
+  transferRoute,
+  roleRoute,
+} from '@/routes/routes'
 
 interface AuditColumnOptions {
   onViewDetails: (log: AuditLog) => void
@@ -49,6 +62,25 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   setting: 'Configuración',
 }
 
+// Helper function to get route for entity
+function getEntityRoute(entityType: string, entityId: number): string | null {
+  const routes: Record<string, (id: number) => string> = {
+    customer: customerRoute,
+    item: itemRoute,
+    loan: loanRoute,
+    payment: paymentRoute,
+    sale: saleRoute,
+    user: userRoute,
+    branch: branchRoute,
+    expense: expenseRoute,
+    transfer: transferRoute,
+    role: roleRoute,
+  }
+
+  const routeFn = routes[entityType]
+  return routeFn ? routeFn(entityId) : null
+}
+
 export function getAuditColumns(options: AuditColumnOptions): ColumnDef<AuditLog>[] {
   const { onViewDetails } = options
 
@@ -84,6 +116,27 @@ export function getAuditColumns(options: AuditColumnOptions): ColumnDef<AuditLog
       header: 'Entidad',
       cell: ({ row }) => {
         const label = ENTITY_TYPE_LABELS[row.original.entity_type] || row.original.entity_type
+        const route = row.original.entity_id
+          ? getEntityRoute(row.original.entity_type, row.original.entity_id)
+          : null
+
+        if (route) {
+          return (
+            <Link
+              to={route}
+              className="group flex items-start gap-1 hover:text-primary transition-colors"
+            >
+              <div>
+                <div className="flex items-center gap-1">
+                  <p className="font-medium">{label}</p>
+                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+                <p className="text-xs text-muted-foreground">ID: {row.original.entity_id}</p>
+              </div>
+            </Link>
+          )
+        }
+
         return (
           <div>
             <p>{label}</p>

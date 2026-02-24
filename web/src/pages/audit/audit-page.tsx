@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Loader2, Filter, X, Download } from 'lucide-react'
+import { Loader2, Filter, X, Download, BarChart3 } from 'lucide-react'
 import { format, subDays } from 'date-fns'
 
 import {
@@ -26,9 +26,10 @@ import { Badge } from '@/components/ui/badge'
 import { useBranchStore } from '@/stores/branch-store'
 import { useBranches } from '@/hooks/use-branches'
 import { useUsers } from '@/hooks/use-users'
-import { useAuditLogs } from '@/hooks/use-audit'
+import { useAuditLogs, useAuditStats } from '@/hooks/use-audit'
 import { getAuditColumns } from './columns'
 import { AuditDetailDialog } from './audit-detail-dialog'
+import { AuditDashboard } from './audit-dashboard'
 
 const ENTITY_TYPE_LABELS: Record<string, string> = {
   customer: 'Cliente',
@@ -62,6 +63,7 @@ export default function AuditPage() {
 
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null)
   const [showFilters, setShowFilters] = useState(false)
+  const [showDashboard, setShowDashboard] = useState(true)
 
   // Parse filters from URL
   const page = parseInt(searchParams.get('page') || '1')
@@ -91,6 +93,12 @@ export default function AuditPage() {
     date_to: dateTo,
     order_by: 'created_at',
     order: 'desc',
+  })
+
+  const { data: statsData, isLoading: isLoadingStats } = useAuditStats({
+    branch_id: branchId,
+    date_from: dateFrom,
+    date_to: dateTo,
   })
 
   const logs = logsResponse?.data || []
@@ -149,6 +157,67 @@ export default function AuditPage() {
     setSearchParams(params)
   }
 
+  const handleExportCSV = () => {
+    if (!logs.length) return
+
+    // Define CSV headers
+    const headers = [
+      'ID',
+      'Fecha/Hora',
+      'Usuario',
+      'Acción',
+      'Tipo de Entidad',
+      'ID de Entidad',
+      'Descripción',
+      'Sucursal',
+      'Dirección IP',
+    ]
+
+    // Convert logs to CSV rows
+    const rows = logs.map((log) => {
+      const actionLabel = AUDIT_ACTIONS.find((a) => a.value === log.action)?.label || log.action
+      const entityLabel = ENTITY_TYPE_LABELS[log.entity_type] || log.entity_type
+
+      return [
+        log.id,
+        log.created_at,
+        log.user_name || 'Sistema',
+        actionLabel,
+        entityLabel,
+        log.entity_id || '',
+        log.description || '',
+        log.branch_name || '',
+        log.ip_address || '',
+      ]
+    })
+
+    // Create CSV content
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) =>
+        row.map((cell) => {
+          // Escape quotes and wrap in quotes if contains comma
+          const cellStr = String(cell)
+          if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+            return `"${cellStr.replace(/"/g, '""')}"`
+          }
+          return cellStr
+        }).join(',')
+      ),
+    ].join('\n')
+
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `auditoria_${format(new Date(), 'yyyy-MM-dd_HHmmss')}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -166,6 +235,21 @@ export default function AuditPage() {
           <div className="flex gap-2">
             <Button
               variant="outline"
+              onClick={handleExportCSV}
+              disabled={!logs || logs.length === 0}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar CSV
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowDashboard(!showDashboard)}
+            >
+              <BarChart3 className="mr-2 h-4 w-4" />
+              {showDashboard ? 'Ocultar' : 'Mostrar'} Dashboard
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => setShowFilters(!showFilters)}
             >
               <Filter className="mr-2 h-4 w-4" />
@@ -179,6 +263,11 @@ export default function AuditPage() {
           </div>
         }
       />
+
+      {/* Dashboard */}
+      {showDashboard && statsData && (
+        <AuditDashboard stats={statsData} isLoading={isLoadingStats} />
+      )}
 
       {/* Filters Panel */}
       {showFilters && (

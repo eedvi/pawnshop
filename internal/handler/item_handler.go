@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -45,6 +46,18 @@ func (h *ItemHandler) Create(c *fiber.Ctx) error {
 	item, err := h.itemService.Create(c.Context(), input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil {
+		description := fmt.Sprintf("Artículo '%s' (SKU: %s) creado con avalúo de Q%.2f", input.Name, item.SKU, input.AppraisedValue)
+		h.auditLogger.LogCreateWithDescription(c, "item", item.ID, description, fiber.Map{
+			"sku":              item.SKU,
+			"name":             input.Name,
+			"category_id":      input.CategoryID,
+			"appraised_value":  input.AppraisedValue,
+			"acquisition_type": input.AcquisitionType,
+		})
 	}
 
 	return response.Created(c, item)
@@ -139,9 +152,31 @@ func (h *ItemHandler) Update(c *fiber.Ctx) error {
 		return response.ValidationError(c, errors)
 	}
 
+	// Get original item for audit
+	originalItem, _ := h.itemService.GetByID(c.Context(), id)
+
 	item, err := h.itemService.Update(c.Context(), id, input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalItem != nil {
+		description := fmt.Sprintf("Artículo '%s' (SKU: %s) actualizado", item.Name, item.SKU)
+
+		oldValues := fiber.Map{
+			"name":            originalItem.Name,
+			"appraised_value": originalItem.AppraisedValue,
+			"loan_value":      originalItem.LoanValue,
+		}
+
+		newValues := fiber.Map{
+			"name":            input.Name,
+			"appraised_value": input.AppraisedValue,
+			"loan_value":      input.LoanValue,
+		}
+
+		h.auditLogger.LogUpdateWithDescription(c, "item", id, description, oldValues, newValues)
 	}
 
 	return response.OK(c, item)
@@ -154,9 +189,24 @@ func (h *ItemHandler) Delete(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid item ID")
 	}
 
+	// Get item before deleting for audit
+	item, _ := h.itemService.GetByID(c.Context(), id)
+
 	user := middleware.GetUser(c)
 	if err := h.itemService.Delete(c.Context(), id, user.ID); err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && item != nil {
+		description := fmt.Sprintf("Artículo '%s' (SKU: %s) eliminado", item.Name, item.SKU)
+		h.auditLogger.LogDeleteWithDescription(c, "item", id, description, fiber.Map{
+			"sku":              item.SKU,
+			"name":             item.Name,
+			"appraised_value":  item.AppraisedValue,
+			"status":           item.Status,
+			"acquisition_type": item.AcquisitionType,
+		})
 	}
 
 	return response.NoContent(c)
@@ -205,9 +255,26 @@ func (h *ItemHandler) MarkForSale(c *fiber.Ctx) error {
 		return response.ValidationError(c, errors)
 	}
 
+	// Get item before marking for sale for audit
+	item, _ := h.itemService.GetByID(c.Context(), id)
+
 	user := middleware.GetUser(c)
 	if err := h.itemService.MarkForSale(c.Context(), id, input.SalePrice, user.ID); err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && item != nil {
+		description := fmt.Sprintf("Artículo '%s' (SKU: %s) marcado para venta en Q%.2f", item.Name, item.SKU, input.SalePrice)
+		h.auditLogger.LogCustomAction(c, "mark_for_sale", "item", id, description,
+			fiber.Map{
+				"status":     item.Status,
+				"sale_price": item.SalePrice,
+			},
+			fiber.Map{
+				"status":     "for_sale",
+				"sale_price": input.SalePrice,
+			})
 	}
 
 	return response.OK(c, fiber.Map{"message": "Item marked for sale successfully"})

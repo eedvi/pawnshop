@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"pawnshop/internal/domain"
 	"pawnshop/internal/repository"
@@ -29,6 +30,24 @@ func (s *AuditService) LogAction(ctx context.Context, branchID, userID *int64, a
 		NewValues:  newValues,
 		IPAddress:  ipAddress,
 		UserAgent:  userAgent,
+	}
+
+	return s.auditRepo.Create(ctx, log)
+}
+
+// LogActionWithDescription creates an audit log entry with a description
+func (s *AuditService) LogActionWithDescription(ctx context.Context, branchID, userID *int64, action, entityType string, entityID *int64, description string, oldValues, newValues interface{}, ipAddress, userAgent string) error {
+	log := &domain.AuditLog{
+		BranchID:    branchID,
+		UserID:      userID,
+		Action:      action,
+		EntityType:  entityType,
+		EntityID:    entityID,
+		Description: &description,
+		OldValues:   oldValues,
+		NewValues:   newValues,
+		IPAddress:   ipAddress,
+		UserAgent:   userAgent,
 	}
 
 	return s.auditRepo.Create(ctx, log)
@@ -62,4 +81,15 @@ func (s *AuditService) LogLogin(ctx context.Context, branchID, userID *int64, ip
 // LogLogout logs a logout action
 func (s *AuditService) LogLogout(ctx context.Context, branchID, userID *int64, ipAddress, userAgent string) error {
 	return s.LogAction(ctx, branchID, userID, "logout", "user", userID, nil, nil, ipAddress, userAgent)
+}
+
+// GetStats retrieves audit statistics
+func (s *AuditService) GetStats(ctx context.Context, params repository.AuditLogListParams) (interface{}, error) {
+	// Type assertion to get concrete repo type
+	if concreteRepo, ok := s.auditRepo.(interface {
+		GetStats(ctx context.Context, params repository.AuditLogListParams) (interface{}, error)
+	}); ok {
+		return concreteRepo.GetStats(ctx, params)
+	}
+	return nil, fmt.Errorf("GetStats not implemented")
 }
