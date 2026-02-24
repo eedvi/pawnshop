@@ -80,6 +80,9 @@ export interface Item {
   // Media
   photos?: string[]
 
+  // Delivery tracking
+  delivered_at?: string
+
   // Audit
   created_by?: number
   updated_by?: number

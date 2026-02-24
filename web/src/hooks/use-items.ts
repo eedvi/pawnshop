@@ -148,3 +148,21 @@ export function useDeleteItemPhoto() {
     },
   })
 }
+
+// Hook to mark item as delivered
+export function useMarkAsDelivered() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, notes }: { id: number; notes?: string }) =>
+      itemService.markAsDelivered(id, notes),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: itemKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: itemKeys.detail(id) })
+      toast.success('Artículo marcado como entregado')
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Error al marcar como entregado')
+    },
+  })
+}

@@ -55,4 +55,13 @@ export const itemService = {
   deletePhoto: async (id: number, photoUrl: string): Promise<void> => {
     return apiDelete(`/items/${id}/images?url=${encodeURIComponent(photoUrl)}`)
   },
+
+  // Mark item as delivered to customer
+  markAsDelivered: async (id: number, notes?: string): Promise<Item> => {
+    const response = await apiPost<{ message: string; item: Item }>(
+      `/items/${id}/mark-as-delivered`,
+      { notes }
+    )
+    return response.item
+  },
 }

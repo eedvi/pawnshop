@@ -29,7 +29,7 @@ func (r *ItemRepository) GetByID(ctx context.Context, id int64) (*domain.Item, e
 			   brand, model, serial_number, color, condition,
 			   appraised_value, loan_value, sale_price, status,
 			   weight, purity, notes, tags, acquisition_type, acquisition_date, acquisition_price,
-			   photos, created_by, updated_by, created_at, updated_at, deleted_at
+			   photos, delivered_at, created_by, updated_by, created_at, updated_at, deleted_at
 		FROM items
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -44,7 +44,7 @@ func (r *ItemRepository) GetBySKU(ctx context.Context, sku string) (*domain.Item
 			   brand, model, serial_number, color, condition,
 			   appraised_value, loan_value, sale_price, status,
 			   weight, purity, notes, tags, acquisition_type, acquisition_date, acquisition_price,
-			   photos, created_by, updated_by, created_at, updated_at, deleted_at
+			   photos, delivered_at, created_by, updated_by, created_at, updated_at, deleted_at
 		FROM items
 		WHERE sku = $1 AND deleted_at IS NULL
 	`
@@ -124,7 +124,7 @@ func (r *ItemRepository) List(ctx context.Context, params repository.ItemListPar
 			   i.brand, i.model, i.serial_number, i.color, i.condition,
 			   i.appraised_value, i.loan_value, i.sale_price, i.status,
 			   i.weight, i.purity, i.notes, i.tags, i.acquisition_type, i.acquisition_date, i.acquisition_price,
-			   i.photos, i.created_by, i.updated_by, i.created_at, i.updated_at, i.deleted_at,
+			   i.photos, i.delivered_at, i.created_by, i.updated_by, i.created_at, i.updated_at, i.deleted_at,
 			   c.id, c.name, c.slug,
 			   cu.id, cu.first_name, cu.last_name, cu.identity_number, cu.phone,
 			   b.id, b.name, b.code
@@ -201,7 +201,7 @@ func (r *ItemRepository) Update(ctx context.Context, item *domain.Item) error {
 			brand = $5, model = $6, serial_number = $7, color = $8, condition = $9,
 			appraised_value = $10, loan_value = $11, sale_price = $12,
 			weight = $13, purity = $14, notes = $15, tags = $16, photos = $17,
-			updated_by = $18, updated_at = NOW()
+			delivered_at = $18, updated_by = $19, updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
@@ -211,7 +211,7 @@ func (r *ItemRepository) Update(ctx context.Context, item *domain.Item) error {
 		NullStringPtr(item.Color), item.Condition,
 		item.AppraisedValue, item.LoanValue, NullFloat64(item.SalePrice),
 		item.Weight, NullStringPtr(item.Purity), NullStringPtr(item.Notes),
-		pq.Array(item.Tags), pq.Array(item.Photos), item.UpdatedBy,
+		pq.Array(item.Tags), pq.Array(item.Photos), NullTime(item.DeliveredAt), item.UpdatedBy,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update item: %w", err)
@@ -302,7 +302,7 @@ func (r *ItemRepository) scanItem(row *sql.Row) (*domain.Item, error) {
 	var salePrice, acquisitionPrice, weight sql.NullFloat64
 	var tags, photos pq.StringArray
 	var createdBy, updatedBy sql.NullInt64
-	var deletedAt sql.NullTime
+	var deletedAt, deliveredAt sql.NullTime
 
 	err := row.Scan(
 		&item.ID, &item.BranchID, &categoryID, &customerID,
@@ -311,7 +311,7 @@ func (r *ItemRepository) scanItem(row *sql.Row) (*domain.Item, error) {
 		&item.AppraisedValue, &item.LoanValue, &salePrice, &item.Status,
 		&weight, &purity, &notes, &tags,
 		&item.AcquisitionType, &item.AcquisitionDate, &acquisitionPrice,
-		&photos, &createdBy, &updatedBy,
+		&photos, &deliveredAt, &createdBy, &updatedBy,
 		&item.CreatedAt, &item.UpdatedAt, &deletedAt,
 	)
 
@@ -343,6 +343,7 @@ func (r *ItemRepository) scanItem(row *sql.Row) (*domain.Item, error) {
 		item.UpdatedBy = updatedBy.Int64
 	}
 	item.DeletedAt = TimePtr(deletedAt)
+	item.DeliveredAt = TimePtr(deliveredAt)
 
 	return item, nil
 }
@@ -354,7 +355,7 @@ func (r *ItemRepository) scanItemRow(rows *sql.Rows) (*domain.Item, error) {
 	var salePrice, acquisitionPrice, weight sql.NullFloat64
 	var tags, photos pq.StringArray
 	var createdBy, updatedBy sql.NullInt64
-	var deletedAt sql.NullTime
+	var deletedAt, deliveredAt sql.NullTime
 
 	err := rows.Scan(
 		&item.ID, &item.BranchID, &categoryID, &customerID,
@@ -363,7 +364,7 @@ func (r *ItemRepository) scanItemRow(rows *sql.Rows) (*domain.Item, error) {
 		&item.AppraisedValue, &item.LoanValue, &salePrice, &item.Status,
 		&weight, &purity, &notes, &tags,
 		&item.AcquisitionType, &item.AcquisitionDate, &acquisitionPrice,
-		&photos, &createdBy, &updatedBy,
+		&photos, &deliveredAt, &createdBy, &updatedBy,
 		&item.CreatedAt, &item.UpdatedAt, &deletedAt,
 	)
 
@@ -392,6 +393,7 @@ func (r *ItemRepository) scanItemRow(rows *sql.Rows) (*domain.Item, error) {
 		item.UpdatedBy = updatedBy.Int64
 	}
 	item.DeletedAt = TimePtr(deletedAt)
+	item.DeliveredAt = TimePtr(deliveredAt)
 
 	return item, nil
 }
@@ -403,7 +405,7 @@ func (r *ItemRepository) scanItemRowWithRelations(rows *sql.Rows) (*domain.Item,
 	var salePrice, acquisitionPrice, weight sql.NullFloat64
 	var tags, photos pq.StringArray
 	var createdBy, updatedBy sql.NullInt64
-	var deletedAt sql.NullTime
+	var deletedAt, deliveredAt sql.NullTime
 
 	// Category fields
 	var catID sql.NullInt64
@@ -424,7 +426,7 @@ func (r *ItemRepository) scanItemRowWithRelations(rows *sql.Rows) (*domain.Item,
 		&item.AppraisedValue, &item.LoanValue, &salePrice, &item.Status,
 		&weight, &purity, &notes, &tags,
 		&item.AcquisitionType, &item.AcquisitionDate, &acquisitionPrice,
-		&photos, &createdBy, &updatedBy,
+		&photos, &deliveredAt, &createdBy, &updatedBy,
 		&item.CreatedAt, &item.UpdatedAt, &deletedAt,
 		// Category
 		&catID, &catName, &catSlug,
@@ -459,6 +461,7 @@ func (r *ItemRepository) scanItemRowWithRelations(rows *sql.Rows) (*domain.Item,
 		item.UpdatedBy = updatedBy.Int64
 	}
 	item.DeletedAt = TimePtr(deletedAt)
+	item.DeliveredAt = TimePtr(deliveredAt)
 
 	// Populate Category relation
 	if catID.Valid {

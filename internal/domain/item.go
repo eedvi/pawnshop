@@ -72,6 +72,9 @@ type Item struct {
 	// Media
 	Photos []string `json:"photos,omitempty"`
 
+	// Delivery tracking
+	DeliveredAt *time.Time `json:"delivered_at,omitempty"` // When item was physically delivered to customer
+
 	// Audit
 	CreatedBy int64 `json:"created_by,omitempty"`
 	UpdatedBy int64 `json:"updated_by,omitempty"`
@@ -100,6 +103,16 @@ func (i *Item) IsAvailable() bool {
 // CanBeSold checks if the item can be sold
 func (i *Item) CanBeSold() bool {
 	return i.Status == ItemStatusAvailable || i.Status == ItemStatusConfiscated
+}
+
+// IsDelivered checks if the item has been delivered to the customer
+func (i *Item) IsDelivered() bool {
+	return i.DeliveredAt != nil
+}
+
+// IsPendingDelivery checks if item is paid but not yet delivered to customer
+func (i *Item) IsPendingDelivery() bool {
+	return i.Status == ItemStatusAvailable && i.AcquisitionType == AcquisitionTypePawn && i.DeliveredAt == nil
 }
 
 // Acquisition type constants

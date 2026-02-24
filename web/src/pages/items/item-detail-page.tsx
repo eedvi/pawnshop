@@ -15,6 +15,7 @@ import {
   Image as ImageIcon,
   Trash2,
   Plus,
+  PackageCheck,
 } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/page-header'
@@ -23,7 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { ROUTES, itemEditRoute, customerRoute } from '@/routes/routes'
-import { useItem, useMarkItemForSale, useDeleteItemPhoto, useUploadItemPhotos } from '@/hooks/use-items'
+import { useItem, useMarkItemForSale, useDeleteItemPhoto, useUploadItemPhotos, useMarkAsDelivered } from '@/hooks/use-items'
 import { useConfirm } from '@/hooks'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { ITEM_STATUSES, ITEM_CONDITIONS } from '@/types'
@@ -37,8 +38,10 @@ export default function ItemDetailPage() {
   const markForSaleMutation = useMarkItemForSale()
   const deletePhotoMutation = useDeleteItemPhoto()
   const uploadPhotosMutation = useUploadItemPhotos()
+  const markAsDeliveredMutation = useMarkAsDelivered()
 
   const confirmDeletePhoto = useConfirm()
+  const confirmDelivery = useConfirm()
   const [markForSaleOpen, setMarkForSaleOpen] = useState(false)
 
   const handleMarkForSale = () => {
@@ -54,6 +57,18 @@ export default function ItemDetailPage() {
         },
       }
     )
+  }
+
+  const handleMarkAsDelivered = async () => {
+    const confirmed = await confirmDelivery.confirm({
+      title: 'Marcar como Entregado',
+      description: '¿Confirmas que el cliente recogió físicamente este artículo?',
+      confirmLabel: 'Confirmar Entrega',
+    })
+
+    if (confirmed) {
+      markAsDeliveredMutation.mutate({ id: itemId })
+    }
   }
 
   const handleDeletePhoto = async (photoUrl: string) => {
@@ -94,7 +109,15 @@ export default function ItemDetailPage() {
 
   const status = ITEM_STATUSES.find((s) => s.value === item.status)
   const condition = ITEM_CONDITIONS.find((c) => c.value === item.condition)
-  const canMarkForSale = ['available', 'confiscated'].includes(item.status)
+
+  // Can mark for sale if available/confiscated AND not delivered to customer (for pawn items)
+  const canMarkForSale = ['available', 'confiscated'].includes(item.status) &&
+    !(item.acquisition_type === 'pawn' && item.delivered_at)
+
+  // Can mark as delivered if available pawn item that hasn't been delivered yet
+  const canMarkAsDelivered = item.status === 'available' &&
+    item.acquisition_type === 'pawn' &&
+    !item.delivered_at
 
   const colorMap: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
     green: 'default',
@@ -115,6 +138,16 @@ export default function ItemDetailPage() {
         backUrl={ROUTES.ITEMS}
         actions={
           <div className="flex gap-2">
+            {canMarkAsDelivered && (
+              <Button
+                variant="outline"
+                onClick={handleMarkAsDelivered}
+                disabled={markAsDeliveredMutation.isPending}
+              >
+                <PackageCheck className="mr-2 h-4 w-4" />
+                Marcar como Entregado
+              </Button>
+            )}
             {canMarkForSale && (
               <Button variant="outline" onClick={handleMarkForSale}>
                 <ShoppingCart className="mr-2 h-4 w-4" />
@@ -287,6 +320,16 @@ export default function ItemDetailPage() {
               </div>
             </div>
 
+            {item.delivered_at && (
+              <div className="flex items-center gap-3">
+                <PackageCheck className="h-4 w-4 text-green-600" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Fecha de Entrega</p>
+                  <p className="font-medium text-green-600">{formatDate(item.delivered_at)}</p>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center gap-3">
               <Scale className="h-4 w-4 text-muted-foreground" />
               <div>
@@ -392,6 +435,7 @@ export default function ItemDetailPage() {
       </Card>
 
       <ConfirmDialog {...confirmDeletePhoto} />
+      <ConfirmDialog {...confirmDelivery} />
       <MarkForSaleDialog
         open={markForSaleOpen}
         onOpenChange={setMarkForSaleOpen}

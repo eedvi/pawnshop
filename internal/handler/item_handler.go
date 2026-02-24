@@ -236,6 +236,72 @@ func (h *ItemHandler) GetForSale(c *fiber.Ctx) error {
 	return response.OK(c, items)
 }
 
+// MarkAsDelivered handles marking an item as physically delivered to customer
+func (h *ItemHandler) MarkAsDelivered(c *fiber.Ctx) error {
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return response.BadRequest(c, "Invalid item ID")
+	}
+
+	var input struct {
+		Notes string `json:"notes"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		// Allow empty body
+		input.Notes = ""
+	}
+
+	user := middleware.GetUser(c)
+	deliveryInput := service.MarkAsDeliveredInput{
+		ItemID:    id,
+		Notes:     input.Notes,
+		UpdatedBy: user.ID,
+	}
+
+	item, err := h.itemService.MarkAsDelivered(c.Context(), deliveryInput)
+	if err != nil {
+		return response.BadRequest(c, err.Error())
+	}
+
+	// Log delivery action
+	if h.auditLogger != nil {
+		h.auditLogger.LogUpdate(c, "item", id, fiber.Map{
+			"delivered_at": nil,
+		}, fiber.Map{
+			"delivered_at": item.DeliveredAt,
+			"notes":        input.Notes,
+		})
+	}
+
+	return response.OK(c, fiber.Map{
+		"message": "Item marked as delivered successfully",
+		"item":    item,
+	})
+}
+
+// GetPendingDeliveries handles getting items pending physical delivery
+func (h *ItemHandler) GetPendingDeliveries(c *fiber.Ctx) error {
+	user := middleware.GetUser(c)
+
+	var branchID int64
+	if user.BranchID != nil {
+		branchID = *user.BranchID
+	} else if bid := c.Query("branch_id"); bid != "" {
+		branchID, _ = strconv.ParseInt(bid, 10, 64)
+	}
+
+	if branchID == 0 {
+		return response.BadRequest(c, "Branch ID is required")
+	}
+
+	items, err := h.itemService.GetPendingDeliveries(c.Context(), branchID)
+	if err != nil {
+		return response.InternalError(c, "")
+	}
+
+	return response.OK(c, items)
+}
+
 // RegisterRoutes registers item routes
 func (h *ItemHandler) RegisterRoutes(app fiber.Router, authMiddleware *middleware.AuthMiddleware) {
 	items := app.Group("/items")
@@ -244,10 +310,12 @@ func (h *ItemHandler) RegisterRoutes(app fiber.Router, authMiddleware *middlewar
 	items.Get("/", authMiddleware.RequirePermission("items.read"), h.List)
 	items.Post("/", authMiddleware.RequirePermission("items.create"), h.Create)
 	items.Get("/for-sale", authMiddleware.RequirePermission("items.read"), h.GetForSale)
+	items.Get("/pending-deliveries", authMiddleware.RequirePermission("items.read"), h.GetPendingDeliveries)
 	items.Get("/sku/:sku", authMiddleware.RequirePermission("items.read"), h.GetBySKU)
 	items.Get("/:id", authMiddleware.RequirePermission("items.read"), h.GetByID)
 	items.Put("/:id", authMiddleware.RequirePermission("items.update"), h.Update)
 	items.Delete("/:id", authMiddleware.RequirePermission("items.delete"), h.Delete)
 	items.Post("/:id/status", authMiddleware.RequirePermission("items.update"), h.UpdateStatus)
 	items.Post("/:id/mark-for-sale", authMiddleware.RequirePermission("items.update"), h.MarkForSale)
+	items.Post("/:id/mark-as-delivered", authMiddleware.RequirePermission("items.update"), h.MarkAsDelivered)
 }

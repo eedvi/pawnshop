@@ -351,6 +351,11 @@ func (s *ItemService) MarkForSale(ctx context.Context, id int64, salePrice float
 		return errors.New("can only mark confiscated or available items for sale")
 	}
 
+	// Cannot mark for sale items that were delivered to customer
+	if item.AcquisitionType == domain.AcquisitionTypePawn && item.DeliveredAt != nil {
+		return errors.New("cannot mark for sale items that have been delivered to customer")
+	}
+
 	item.SalePrice = &salePrice
 	item.Status = domain.ItemStatusForSale
 	item.UpdatedBy = updatedBy
@@ -473,6 +478,90 @@ func (s *ItemService) RemovePhoto(ctx context.Context, itemID int64, photoURL st
 	}
 
 	return nil
+}
+
+// MarkAsDeliveredInput represents mark as delivered request data
+type MarkAsDeliveredInput struct {
+	ItemID    int64  `json:"item_id" validate:"required"`
+	Notes     string `json:"notes"`
+	UpdatedBy int64  `json:"-"`
+}
+
+// MarkAsDelivered marks an item as physically delivered to the customer
+func (s *ItemService) MarkAsDelivered(ctx context.Context, input MarkAsDeliveredInput) (*domain.Item, error) {
+	item, err := s.itemRepo.GetByID(ctx, input.ItemID)
+	if err != nil {
+		return nil, errors.New("item not found")
+	}
+
+	// Can only mark available items as delivered
+	if item.Status != domain.ItemStatusAvailable {
+		return nil, errors.New("only available items can be marked as delivered")
+	}
+
+	// Item should belong to a customer (pawn acquisition)
+	if item.AcquisitionType != domain.AcquisitionTypePawn || item.CustomerID == nil {
+		return nil, errors.New("only pawned items with customer can be delivered")
+	}
+
+	// Check if already delivered
+	if item.DeliveredAt != nil {
+		return nil, errors.New("item already marked as delivered")
+	}
+
+	// Mark as delivered
+	now := time.Now()
+	item.DeliveredAt = &now
+	item.UpdatedBy = input.UpdatedBy
+
+	if err := s.itemRepo.Update(ctx, item); err != nil {
+		return nil, fmt.Errorf("failed to mark item as delivered: %w", err)
+	}
+
+	// Create history entry
+	notes := input.Notes
+	if notes == "" {
+		notes = "Item physically delivered to customer"
+	}
+	s.itemRepo.CreateHistory(ctx, &domain.ItemHistory{
+		ItemID:    input.ItemID,
+		Action:    "delivered",
+		OldStatus: string(item.Status),
+		NewStatus: string(item.Status),
+		Notes:     notes,
+		CreatedBy: input.UpdatedBy,
+	})
+
+	return item, nil
+}
+
+// GetPendingDeliveries retrieves items that are paid but not yet delivered
+func (s *ItemService) GetPendingDeliveries(ctx context.Context, branchID int64) ([]*domain.Item, error) {
+	status := domain.ItemStatusAvailable
+	result, err := s.itemRepo.List(ctx, repository.ItemListParams{
+		BranchID: branchID,
+		Status:   &status,
+		PaginationParams: repository.PaginationParams{
+			Page:    1,
+			PerPage: 1000,
+			OrderBy: "updated_at",
+			Order:   "desc",
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter for pawn items not yet delivered
+	items := make([]*domain.Item, 0)
+	for i := range result.Data {
+		item := &result.Data[i]
+		if item.IsPendingDelivery() {
+			items = append(items, item)
+		}
+	}
+
+	return items, nil
 }
 
 // Helper functions
