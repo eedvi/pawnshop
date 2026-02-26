@@ -47,8 +47,8 @@ type Loan struct {
 	LateFeeAmount float64 `json:"late_fee_amount"`
 
 	// Dates
-	StartDate       time.Time  `json:"start_date"`
-	DueDate         time.Time  `json:"due_date"`
+	StartDate       Date       `json:"start_date"`
+	DueDate         Date       `json:"due_date"`
 	PaidDate        *time.Time `json:"paid_date,omitempty"`
 	ConfiscatedDate *time.Time `json:"confiscated_date,omitempty"`
 
@@ -105,7 +105,7 @@ func (l *Loan) IsOverdue() bool {
 	if l.Status != LoanStatusActive {
 		return false
 	}
-	return time.Now().After(l.DueDate)
+	return time.Now().After(l.DueDate.Time)
 }
 
 // IsInGracePeriod checks if the loan is in grace period
@@ -119,7 +119,7 @@ func (l *Loan) IsInGracePeriod() bool {
 
 // DaysUntilDue returns the number of days until due date
 func (l *Loan) DaysUntilDue() int {
-	days := int(time.Until(l.DueDate).Hours() / 24)
+	days := int(time.Until(l.DueDate.Time).Hours() / 24)
 	if days < 0 {
 		return 0
 	}
@@ -131,7 +131,7 @@ func (l *Loan) CalculateDaysOverdue() int {
 	if !l.IsOverdue() {
 		return 0
 	}
-	return int(time.Since(l.DueDate).Hours() / 24)
+	return int(time.Since(l.DueDate.Time).Hours() / 24)
 }
 
 // LoanInstallment represents an installment for a loan

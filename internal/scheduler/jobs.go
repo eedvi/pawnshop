@@ -55,13 +55,29 @@ func (s *JobService) ProcessOverdueLoans(ctx context.Context) error {
 		return err
 	}
 
+	s.logger.Debug().Int("loans_found", len(loans)).Msg("Overdue loans retrieved")
+
 	now := time.Now()
 	processed := 0
 	confiscated := 0
+	skipped := 0
 
 	for _, loan := range loans {
+		s.logger.Debug().
+			Int64("loan_id", loan.ID).
+			Str("loan_number", loan.LoanNumber).
+			Str("status", string(loan.Status)).
+			Time("due_date", loan.DueDate.Time).
+			Int("grace_period_days", loan.GracePeriodDays).
+			Msg("Processing loan for status update")
+
 		// Skip if already paid or confiscated
 		if loan.Status == domain.LoanStatusPaid || loan.Status == domain.LoanStatusConfiscated {
+			s.logger.Debug().
+				Int64("loan_id", loan.ID).
+				Str("status", string(loan.Status)).
+				Msg("Skipping - already paid or confiscated")
+			skipped++
 			continue
 		}
 
@@ -73,11 +89,25 @@ func (s *JobService) ProcessOverdueLoans(ctx context.Context) error {
 					s.logger.Error().Err(err).Int64("loan_id", loan.ID).Msg("Failed to mark loan as overdue")
 					continue
 				}
+				s.logger.Info().
+					Int64("loan_id", loan.ID).
+					Str("loan_number", loan.LoanNumber).
+					Msg("Loan marked as overdue")
 				processed++
 			}
 
 			// Check if past grace period - automatic confiscation
 			gracePeriodEnd := loan.DueDate.AddDate(0, 0, loan.GracePeriodDays)
+			daysUntilConfiscation := int(gracePeriodEnd.Sub(now).Hours() / 24)
+
+			s.logger.Debug().
+				Int64("loan_id", loan.ID).
+				Time("grace_period_end", gracePeriodEnd).
+				Int("days_until_confiscation", daysUntilConfiscation).
+				Bool("past_grace_period", gracePeriodEnd.Before(now)).
+				Str("current_status", string(loan.Status)).
+				Msg("Checking confiscation eligibility")
+
 			if gracePeriodEnd.Before(now) && loan.Status == domain.LoanStatusOverdue {
 				// Update loan status to confiscated
 				if err := s.loanRepo.UpdateStatus(ctx, loan.ID, domain.LoanStatusConfiscated); err != nil {
@@ -98,13 +128,24 @@ func (s *JobService) ProcessOverdueLoans(ctx context.Context) error {
 					Msg("Loan automatically confiscated after grace period")
 
 				confiscated++
+			} else {
+				s.logger.Debug().
+					Int64("loan_id", loan.ID).
+					Msg("Not yet eligible for confiscation")
 			}
+		} else {
+			s.logger.Debug().
+				Int64("loan_id", loan.ID).
+				Msg("Skipping - not past due date yet")
+			skipped++
 		}
 	}
 
 	s.logger.Info().
 		Int("marked_overdue", processed).
 		Int("auto_confiscated", confiscated).
+		Int("skipped", skipped).
+		Int("total_processed", len(loans)).
 		Msg("Overdue loan processing completed")
 
 	return nil
@@ -119,24 +160,55 @@ func (s *JobService) CalculateLateFeesJob(ctx context.Context) error {
 		return err
 	}
 
+	s.logger.Debug().Int("loans_found", len(loans)).Msg("Overdue loans retrieved")
+
 	now := time.Now()
 	updated := 0
+	skipped := 0
 
 	for _, loan := range loans {
+		s.logger.Debug().
+			Int64("loan_id", loan.ID).
+			Str("loan_number", loan.LoanNumber).
+			Str("status", string(loan.Status)).
+			Time("due_date", loan.DueDate.Time).
+			Float64("current_late_fee", loan.LateFeeAmount).
+			Float64("late_fee_rate", loan.LateFeeRate).
+			Float64("loan_amount", loan.LoanAmount).
+			Msg("Processing loan for late fees")
+
 		// Only calculate late fees for overdue loans (during grace period)
 		// Once confiscated, late fees are frozen
 		if loan.Status != domain.LoanStatusOverdue {
+			s.logger.Debug().
+				Int64("loan_id", loan.ID).
+				Str("status", string(loan.Status)).
+				Msg("Skipping - not in overdue status")
+			skipped++
 			continue
 		}
 
 		// Calculate days overdue
-		daysOverdue := int(now.Sub(loan.DueDate).Hours() / 24)
+		daysOverdue := int(now.Sub(loan.DueDate.Time).Hours() / 24)
 		if daysOverdue <= 0 {
+			s.logger.Debug().
+				Int64("loan_id", loan.ID).
+				Int("days_overdue", daysOverdue).
+				Msg("Skipping - not yet overdue")
+			skipped++
 			continue
 		}
 
 		// Calculate late fee (daily rate * principal * days overdue)
 		lateFee := loan.LateFeeRate / 100 * loan.LoanAmount * float64(daysOverdue)
+
+		s.logger.Debug().
+			Int64("loan_id", loan.ID).
+			Int("days_overdue", daysOverdue).
+			Float64("calculated_late_fee", lateFee).
+			Float64("current_late_fee", loan.LateFeeAmount).
+			Float64("difference", lateFee-loan.LateFeeAmount).
+			Msg("Late fee calculation")
 
 		// Update loan if late fee changed significantly
 		if lateFee > loan.LateFeeAmount+0.01 {
@@ -145,11 +217,26 @@ func (s *JobService) CalculateLateFeesJob(ctx context.Context) error {
 				s.logger.Error().Err(err).Int64("loan_id", loan.ID).Msg("Failed to update late fees")
 				continue
 			}
+			s.logger.Info().
+				Int64("loan_id", loan.ID).
+				Str("loan_number", loan.LoanNumber).
+				Float64("new_late_fee", lateFee).
+				Int("days_overdue", daysOverdue).
+				Msg("Late fee updated")
 			updated++
+		} else {
+			s.logger.Debug().
+				Int64("loan_id", loan.ID).
+				Msg("Skipping - late fee unchanged")
+			skipped++
 		}
 	}
 
-	s.logger.Info().Int("updated", updated).Msg("Late fee calculation completed")
+	s.logger.Info().
+		Int("updated", updated).
+		Int("skipped", skipped).
+		Int("total_processed", len(loans)).
+		Msg("Late fee calculation completed")
 	return nil
 }
 
@@ -280,7 +367,7 @@ func (s *JobService) SendOverdueNotifications(ctx context.Context) error {
 		}
 
 		// Calculate days overdue and remaining grace period
-		daysOverdue := int(now.Sub(loan.DueDate).Hours() / 24)
+		daysOverdue := int(now.Sub(loan.DueDate.Time).Hours() / 24)
 		gracePeriodEnd := loan.DueDate.AddDate(0, 0, loan.GracePeriodDays)
 		daysUntilConfiscation := int(gracePeriodEnd.Sub(now).Hours() / 24)
 
@@ -375,7 +462,7 @@ func RegisterDefaultJobs(scheduler *Scheduler, jobService *JobService) {
 	// Process overdue loans - run every minute (dev: every:1m, prod: hourly)
 	scheduler.AddJob(&Job{
 		Name:     "process_overdue_loans",
-		Schedule: "hourly",
+		Schedule: "every:1m",
 		Handler:  jobService.ProcessOverdueLoans,
 		Enabled:  true,
 	})
@@ -383,7 +470,7 @@ func RegisterDefaultJobs(scheduler *Scheduler, jobService *JobService) {
 	// Calculate late fees - run every minute (dev: every:1m, prod: every:6h)
 	scheduler.AddJob(&Job{
 		Name:     "calculate_late_fees",
-		Schedule: "every:6h",
+		Schedule: "every:1m",
 		Handler:  jobService.CalculateLateFeesJob,
 		Enabled:  true,
 	})
@@ -391,7 +478,7 @@ func RegisterDefaultJobs(scheduler *Scheduler, jobService *JobService) {
 	// Calculate daily interest - run every day at midnight
 	scheduler.AddJob(&Job{
 		Name:     "calculate_daily_interest",
-		Schedule: "daily",
+		Schedule: "every:1m",
 		Handler:  jobService.CalculateDailyInterest,
 		Enabled:  true,
 	})
@@ -399,7 +486,7 @@ func RegisterDefaultJobs(scheduler *Scheduler, jobService *JobService) {
 	// Send due date reminders - run every day
 	scheduler.AddJob(&Job{
 		Name:     "send_due_date_reminders",
-		Schedule: "daily",
+		Schedule: "every:1m",
 		Handler:  jobService.SendDueDateReminders,
 		Enabled:  true,
 	})
@@ -407,7 +494,7 @@ func RegisterDefaultJobs(scheduler *Scheduler, jobService *JobService) {
 	// Send overdue notifications - run every day
 	scheduler.AddJob(&Job{
 		Name:     "send_overdue_notifications",
-		Schedule: "daily",
+		Schedule: "every:1m",
 		Handler:  jobService.SendOverdueNotifications,
 		Enabled:  true,
 	})
@@ -415,7 +502,7 @@ func RegisterDefaultJobs(scheduler *Scheduler, jobService *JobService) {
 	// Cleanup expired sessions - run every day
 	scheduler.AddJob(&Job{
 		Name:     "cleanup_expired_sessions",
-		Schedule: "daily",
+		Schedule: "every:1m",
 		Handler:  jobService.CleanupExpiredSessions,
 		Enabled:  true,
 	})
@@ -423,7 +510,7 @@ func RegisterDefaultJobs(scheduler *Scheduler, jobService *JobService) {
 	// Generate daily report - run every day
 	scheduler.AddJob(&Job{
 		Name:     "generate_daily_report",
-		Schedule: "daily",
+		Schedule: "every:1m",
 		Handler:  jobService.GenerateDailyReport,
 		Enabled:  true,
 	})

@@ -18,6 +18,7 @@ type LoanService struct {
 	itemRepo       repository.ItemRepository
 	customerRepo   repository.CustomerRepository
 	paymentRepo    repository.PaymentRepository
+	settingRepo    repository.SettingRepository
 	logger         zerolog.Logger
 	businessLogger *logger.BusinessLogger
 }
@@ -28,6 +29,7 @@ func NewLoanService(
 	itemRepo repository.ItemRepository,
 	customerRepo repository.CustomerRepository,
 	paymentRepo repository.PaymentRepository,
+	settingRepo repository.SettingRepository,
 	log zerolog.Logger,
 ) *LoanService {
 	serviceLogger := log.With().Str("service", "loan").Logger()
@@ -36,6 +38,7 @@ func NewLoanService(
 		itemRepo:       itemRepo,
 		customerRepo:   customerRepo,
 		paymentRepo:    paymentRepo,
+		settingRepo:    settingRepo,
 		logger:         serviceLogger,
 		businessLogger: logger.NewBusinessLogger(serviceLogger),
 	}
@@ -114,6 +117,21 @@ func (s *LoanService) Create(ctx context.Context, input CreateLoanInput) (*domai
 	interestAmount := input.LoanAmount * (input.InterestRate / 100)
 	totalAmount := input.LoanAmount + interestAmount
 
+	// Get default late fee rate from settings if not provided
+	lateFeeRate := input.LateFeeRate
+	if lateFeeRate == 0 {
+		if setting, err := s.settingRepo.Get(ctx, "default_late_fee_rate", nil); err == nil {
+			if rate, ok := setting.Value.(float64); ok {
+				lateFeeRate = rate
+			}
+		}
+		// If still 0, use a system default of 1% per day
+		if lateFeeRate == 0 {
+			lateFeeRate = 1.0
+			s.logger.Warn().Msg("Using system default late fee rate of 1% per day")
+		}
+	}
+
 	// Generate loan number
 	loanNumber, err := s.loanRepo.GenerateNumber(ctx)
 	if err != nil {
@@ -122,17 +140,17 @@ func (s *LoanService) Create(ctx context.Context, input CreateLoanInput) (*domai
 	}
 
 	// Calculate due date and minimum payment info
-	startDate := time.Now()
-	var dueDate time.Time
+	startDate := domain.Today()
+	var dueDate domain.Date
 	var loanTermDays int
 
 	// For installment payment plans, due date is the last installment date
 	if input.PaymentPlanType == "installments" && input.NumberOfInstallments > 0 {
-		dueDate = startDate.AddDate(0, input.NumberOfInstallments, 0)
+		dueDate = domain.DateFromTime(startDate.AddDate(0, input.NumberOfInstallments, 0))
 		// Calculate actual term in days based on installments
-		loanTermDays = int(dueDate.Sub(startDate).Hours() / 24)
+		loanTermDays = int(dueDate.Sub(startDate.Time).Hours() / 24)
 	} else {
-		dueDate = startDate.AddDate(0, 0, input.LoanTermDays)
+		dueDate = domain.DateFromTime(startDate.AddDate(0, 0, input.LoanTermDays))
 		loanTermDays = input.LoanTermDays
 	}
 
@@ -156,7 +174,7 @@ func (s *LoanService) Create(ctx context.Context, input CreateLoanInput) (*domai
 		PrincipalRemaining:     input.LoanAmount,
 		InterestRemaining:      interestAmount,
 		TotalAmount:            totalAmount,
-		LateFeeRate:            input.LateFeeRate,
+		LateFeeRate:            lateFeeRate,
 		StartDate:              startDate,
 		DueDate:                dueDate,
 		PaymentPlanType:        domain.PaymentPlanType(input.PaymentPlanType),
@@ -420,8 +438,8 @@ func (s *LoanService) Renew(ctx context.Context, input RenewLoanInput) (*domain.
 		InterestRemaining:      newInterestAmount,
 		TotalAmount:            loan.PrincipalRemaining + newInterestAmount,
 		LateFeeRate:            loan.LateFeeRate,
-		StartDate:              time.Now(),
-		DueDate:                time.Now().AddDate(0, 0, input.NewTermDays),
+		StartDate:              domain.Today(),
+		DueDate:                domain.DateFromTime(time.Now().AddDate(0, 0, input.NewTermDays)),
 		PaymentPlanType:        loan.PaymentPlanType,
 		LoanTermDays:           input.NewTermDays,
 		RequiresMinimumPayment: loan.RequiresMinimumPayment,

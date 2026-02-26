@@ -108,7 +108,7 @@ func main() {
 	userService := service.NewUserService(userRepo, roleRepo, branchRepo, passwordManager)
 	customerService := service.NewCustomerService(customerRepo, branchRepo)
 	itemService := service.NewItemService(itemRepo, branchRepo, categoryRepo, customerRepo)
-	loanService := service.NewLoanService(loanRepo, itemRepo, customerRepo, paymentRepo, log.Logger)
+	loanService := service.NewLoanService(loanRepo, itemRepo, customerRepo, paymentRepo, settingRepo, log.Logger)
 	paymentService := service.NewPaymentService(paymentRepo, loanRepo, customerRepo, itemRepo, log.Logger)
 	saleService := service.NewSaleService(saleRepo, itemRepo, customerRepo, branchRepo)
 	cashService := service.NewCashService(cashRegisterRepo, cashSessionRepo, cashMovementRepo, branchRepo)
