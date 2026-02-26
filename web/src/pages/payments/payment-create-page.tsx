@@ -107,11 +107,12 @@ export default function PaymentCreatePage() {
                   <FormInput
                     control={form.control}
                     name="loan_id"
-                    label="ID del Préstamo"
-                    type="number"
+                    label="Préstamo"
+                    type="text"
                     required
-                    description={loan ? `Préstamo: ${loan.loan_number}` : 'Ingrese el ID del préstamo'}
-                    onChange={(e) => setCustomLoanId(Number(e.target.value))}
+                    value={loan?.loan_number || ''}
+                    disabled
+                    readOnly
                   />
 
                   {loadingLoan && customLoanId > 0 && (
