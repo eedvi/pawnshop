@@ -285,7 +285,10 @@ func (r *LoanRepository) GetOverdueLoans(ctx context.Context, branchID int64) ([
 			   status, days_overdue, renewed_from_id, renewal_count, notes,
 			   created_by, updated_by, created_at, updated_at, deleted_at
 		FROM loans
-		WHERE branch_id = $1 AND status = 'active' AND due_date < NOW() AND deleted_at IS NULL
+		WHERE (branch_id = $1 OR $1 = 0)
+		  AND status IN ('active', 'overdue')
+		  AND due_date < NOW()
+		  AND deleted_at IS NULL
 		ORDER BY due_date ASC
 	`
 

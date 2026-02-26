@@ -5,15 +5,17 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rs/zerolog"
 	"pawnshop/internal/domain"
 	"pawnshop/internal/repository"
 	"pawnshop/internal/service"
+
+	"github.com/rs/zerolog"
 )
 
 // JobService contains dependencies for scheduled jobs
 type JobService struct {
 	loanRepo            repository.LoanRepository
+	itemRepo            repository.ItemRepository
 	paymentRepo         repository.PaymentRepository
 	customerRepo        repository.CustomerRepository
 	notificationService service.NotificationService
@@ -24,6 +26,7 @@ type JobService struct {
 // NewJobService creates a new JobService
 func NewJobService(
 	loanRepo repository.LoanRepository,
+	itemRepo repository.ItemRepository,
 	paymentRepo repository.PaymentRepository,
 	customerRepo repository.CustomerRepository,
 	notificationService service.NotificationService,
@@ -32,6 +35,7 @@ func NewJobService(
 ) *JobService {
 	return &JobService{
 		loanRepo:            loanRepo,
+		itemRepo:            itemRepo,
 		paymentRepo:         paymentRepo,
 		customerRepo:        customerRepo,
 		notificationService: notificationService,
@@ -53,11 +57,11 @@ func (s *JobService) ProcessOverdueLoans(ctx context.Context) error {
 
 	now := time.Now()
 	processed := 0
-	defaulted := 0
+	confiscated := 0
 
 	for _, loan := range loans {
-		// Skip if already defaulted, paid, or confiscated
-		if loan.Status == domain.LoanStatusDefaulted || loan.Status == domain.LoanStatusPaid || loan.Status == domain.LoanStatusConfiscated {
+		// Skip if already paid or confiscated
+		if loan.Status == domain.LoanStatusPaid || loan.Status == domain.LoanStatusConfiscated {
 			continue
 		}
 
@@ -72,21 +76,35 @@ func (s *JobService) ProcessOverdueLoans(ctx context.Context) error {
 				processed++
 			}
 
-			// Check if past grace period - should be defaulted
+			// Check if past grace period - automatic confiscation
 			gracePeriodEnd := loan.DueDate.AddDate(0, 0, loan.GracePeriodDays)
 			if gracePeriodEnd.Before(now) && loan.Status == domain.LoanStatusOverdue {
-				if err := s.loanRepo.UpdateStatus(ctx, loan.ID, domain.LoanStatusDefaulted); err != nil {
-					s.logger.Error().Err(err).Int64("loan_id", loan.ID).Msg("Failed to mark loan as defaulted")
+				// Update loan status to confiscated
+				if err := s.loanRepo.UpdateStatus(ctx, loan.ID, domain.LoanStatusConfiscated); err != nil {
+					s.logger.Error().Err(err).Int64("loan_id", loan.ID).Msg("Failed to confiscate loan")
 					continue
 				}
-				defaulted++
+
+				// Update item status to for_sale
+				if err := s.itemRepo.UpdateStatus(ctx, loan.ItemID, domain.ItemStatusForSale); err != nil {
+					s.logger.Error().Err(err).Int64("loan_id", loan.ID).Int64("item_id", loan.ItemID).Msg("Failed to update item status to for_sale")
+					// Continue anyway - loan status was updated
+				}
+
+				s.logger.Info().
+					Int64("loan_id", loan.ID).
+					Str("loan_number", loan.LoanNumber).
+					Int64("item_id", loan.ItemID).
+					Msg("Loan automatically confiscated after grace period")
+
+				confiscated++
 			}
 		}
 	}
 
 	s.logger.Info().
 		Int("marked_overdue", processed).
-		Int("marked_defaulted", defaulted).
+		Int("auto_confiscated", confiscated).
 		Msg("Overdue loan processing completed")
 
 	return nil
@@ -105,7 +123,8 @@ func (s *JobService) CalculateLateFeesJob(ctx context.Context) error {
 	updated := 0
 
 	for _, loan := range loans {
-		// Skip if not overdue or already defaulted
+		// Only calculate late fees for overdue loans (during grace period)
+		// Once confiscated, late fees are frozen
 		if loan.Status != domain.LoanStatusOverdue {
 			continue
 		}
@@ -169,11 +188,11 @@ func (s *JobService) SendDueDateReminders(ctx context.Context) error {
 					loan.ID, daysUntilDue, loan.LoanAmount-loan.AmountPaid)
 
 				_, err := s.notificationService.SendToCustomer(ctx, service.SendNotificationRequest{
-					CustomerID:  loan.CustomerID,
-					Type:        "loan_due_reminder",
-					Title:       "Recordatorio de Vencimiento de Préstamo",
-					Message:     message,
-					Channel:     "sms", // Default to SMS
+					CustomerID:    loan.CustomerID,
+					Type:          "loan_due_reminder",
+					Title:         "Recordatorio de Vencimiento de Préstamo",
+					Message:       message,
+					Channel:       "sms", // Default to SMS
 					ReferenceType: func() *string { t := "loan"; return &t }(),
 					ReferenceID:   &loan.ID,
 				})
@@ -201,7 +220,7 @@ func (s *JobService) CalculateDailyInterest(ctx context.Context) error {
 	s.logger.Info().Msg("Calculating daily interest...")
 
 	params := repository.LoanListParams{
-		Status: func() *domain.LoanStatus { status := domain.LoanStatusActive; return &status }(),
+		Status:           func() *domain.LoanStatus { status := domain.LoanStatusActive; return &status }(),
 		PaginationParams: repository.PaginationParams{PerPage: 1000},
 	}
 
@@ -247,6 +266,8 @@ func (s *JobService) SendOverdueNotifications(ctx context.Context) error {
 	}
 
 	notificationsSent := 0
+	now := time.Now()
+
 	for _, loan := range loans {
 		if loan.Status != domain.LoanStatusOverdue {
 			continue
@@ -258,21 +279,28 @@ func (s *JobService) SendOverdueNotifications(ctx context.Context) error {
 			continue
 		}
 
-		// Calculate days overdue
-		now := time.Now()
+		// Calculate days overdue and remaining grace period
 		daysOverdue := int(now.Sub(loan.DueDate).Hours() / 24)
+		gracePeriodEnd := loan.DueDate.AddDate(0, 0, loan.GracePeriodDays)
+		daysUntilConfiscation := int(gracePeriodEnd.Sub(now).Hours() / 24)
 
 		// Send notification using notification service
 		if s.notificationService != nil {
-			message := fmt.Sprintf("Su préstamo #%d está vencido por %d día(s). Por favor realice su pago lo antes posible para evitar cargos adicionales.",
-				loan.ID, daysOverdue)
+			var message string
+			if daysUntilConfiscation > 0 {
+				message = fmt.Sprintf("⚠️ Su préstamo %s está vencido por %d día(s). Le quedan %d día(s) para pagar antes de que el artículo sea confiscado y puesto en venta. Monto pendiente: Q%.2f + Mora: Q%.2f",
+					loan.LoanNumber, daysOverdue, daysUntilConfiscation, loan.PrincipalRemaining+loan.InterestRemaining, loan.LateFeeAmount)
+			} else {
+				message = fmt.Sprintf("🚨 URGENTE: Su préstamo %s será confiscado HOY. Pague ahora para evitar la pérdida del artículo. Monto pendiente: Q%.2f + Mora: Q%.2f",
+					loan.LoanNumber, loan.PrincipalRemaining+loan.InterestRemaining, loan.LateFeeAmount)
+			}
 
 			_, err := s.notificationService.SendToCustomer(ctx, service.SendNotificationRequest{
-				CustomerID:  loan.CustomerID,
-				Type:        "loan_overdue",
-				Title:       "Préstamo Vencido",
-				Message:     message,
-				Channel:     "sms",
+				CustomerID:    loan.CustomerID,
+				Type:          "loan_overdue",
+				Title:         "Préstamo Vencido - Riesgo de Confiscación",
+				Message:       message,
+				Channel:       "sms",
 				ReferenceType: func() *string { t := "loan"; return &t }(),
 				ReferenceID:   &loan.ID,
 			})
@@ -344,7 +372,7 @@ func (s *JobService) GenerateDailyReport(ctx context.Context) error {
 
 // RegisterDefaultJobs registers all default scheduled jobs
 func RegisterDefaultJobs(scheduler *Scheduler, jobService *JobService) {
-	// Process overdue loans - run every hour
+	// Process overdue loans - run every minute (dev: every:1m, prod: hourly)
 	scheduler.AddJob(&Job{
 		Name:     "process_overdue_loans",
 		Schedule: "hourly",
@@ -352,7 +380,7 @@ func RegisterDefaultJobs(scheduler *Scheduler, jobService *JobService) {
 		Enabled:  true,
 	})
 
-	// Calculate late fees - run every 6 hours
+	// Calculate late fees - run every minute (dev: every:1m, prod: every:6h)
 	scheduler.AddJob(&Job{
 		Name:     "calculate_late_fees",
 		Schedule: "every:6h",

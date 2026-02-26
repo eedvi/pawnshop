@@ -40,6 +40,7 @@ func main() {
 
 	// Initialize repositories
 	loanRepo := postgres.NewLoanRepository(db)
+	itemRepo := postgres.NewItemRepository(db)
 	paymentRepo := postgres.NewPaymentRepository(db)
 	customerRepo := postgres.NewCustomerRepository(db)
 	userRepo := postgres.NewUserRepository(db)
@@ -68,6 +69,7 @@ func main() {
 	// Initialize job service
 	jobService := scheduler.NewJobService(
 		loanRepo,
+		itemRepo,
 		paymentRepo,
 		customerRepo,
 		notificationService,
