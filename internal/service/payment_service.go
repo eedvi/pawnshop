@@ -83,6 +83,17 @@ func (s *PaymentService) Create(ctx context.Context, input CreatePaymentInput) (
 		return nil, errors.New("loan has been confiscated")
 	}
 
+	// Calculate total amount owed (prevent overpayment)
+	totalOwed := loan.PrincipalRemaining + loan.InterestRemaining + loan.LateFeeAmount
+	if input.Amount > totalOwed {
+		s.logger.Warn().
+			Int64("loan_id", input.LoanID).
+			Float64("payment_amount", input.Amount).
+			Float64("total_owed", totalOwed).
+			Msg("Payment rejected: amount exceeds total owed")
+		return nil, fmt.Errorf("payment amount (Q%.2f) exceeds total owed (Q%.2f)", input.Amount, totalOwed)
+	}
+
 	// Calculate how to apply the payment
 	// Order: Late fees -> Interest -> Principal
 	remainingPayment := input.Amount
@@ -342,6 +353,16 @@ func (s *PaymentService) CalculatePayoff(ctx context.Context, loanID int64) (flo
 	return loan.RemainingBalance(), nil
 }
 
+// CalculatePayoffDetailed calculates the payoff amount and returns loan details
+func (s *PaymentService) CalculatePayoffDetailed(ctx context.Context, loanID int64) (float64, *domain.Loan, error) {
+	loan, err := s.loanRepo.GetByID(ctx, loanID)
+	if err != nil {
+		return 0, nil, errors.New("loan not found")
+	}
+
+	return loan.RemainingBalance(), loan, nil
+}
+
 // CalculateMinimumPayment calculates the minimum payment due for a loan
 func (s *PaymentService) CalculateMinimumPayment(ctx context.Context, loanID int64) (float64, error) {
 	loan, err := s.loanRepo.GetByID(ctx, loanID)
@@ -361,6 +382,27 @@ func (s *PaymentService) CalculateMinimumPayment(ctx context.Context, loanID int
 
 	// Add any late fees
 	return minimumPayment + loan.LateFeeAmount, nil
+}
+
+// CalculateMinimumPaymentDetailed calculates the minimum payment and returns loan details
+func (s *PaymentService) CalculateMinimumPaymentDetailed(ctx context.Context, loanID int64) (float64, *domain.Loan, error) {
+	loan, err := s.loanRepo.GetByID(ctx, loanID)
+	if err != nil {
+		return 0, nil, errors.New("loan not found")
+	}
+
+	if !loan.RequiresMinimumPayment || loan.MinimumPaymentAmount == nil {
+		return loan.RemainingBalance(), loan, nil
+	}
+
+	// Minimum is the lesser of the minimum payment amount or remaining balance
+	minimumPayment := *loan.MinimumPaymentAmount
+	if loan.RemainingBalance() < minimumPayment {
+		return loan.RemainingBalance(), loan, nil
+	}
+
+	// Add any late fees
+	return minimumPayment + loan.LateFeeAmount, loan, nil
 }
 
 // applyPaymentToInstallments applies a payment amount to loan installments

@@ -54,7 +54,7 @@ func (h *AuditHandler) List(c *fiber.Ctx) error {
 
 	result, err := h.auditService.List(c.Context(), params)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.Paginated(c, result.Data, result.Page, result.PerPage, result.Total)
@@ -79,7 +79,7 @@ func (h *AuditHandler) GetStats(c *fiber.Ctx) error {
 
 	stats, err := h.auditService.GetStats(c.Context(), params)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, stats)

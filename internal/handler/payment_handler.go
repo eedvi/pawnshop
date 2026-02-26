@@ -149,7 +149,7 @@ func (h *PaymentHandler) List(c *fiber.Ctx) error {
 
 	result, err := h.paymentService.List(c.Context(), params)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.Paginated(c, result.Data, result.Page, result.PerPage, result.Total)
@@ -213,14 +213,17 @@ func (h *PaymentHandler) CalculatePayoff(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid loan ID")
 	}
 
-	amount, err := h.paymentService.CalculatePayoff(c.Context(), loanID)
+	amount, loan, err := h.paymentService.CalculatePayoffDetailed(c.Context(), loanID)
 	if err != nil {
 		return response.NotFound(c, "Loan not found")
 	}
 
 	return response.OK(c, fiber.Map{
-		"loan_id":       loanID,
-		"payoff_amount": amount,
+		"loan_id":             loanID,
+		"principal_remaining": loan.PrincipalRemaining,
+		"interest_remaining":  loan.InterestRemaining,
+		"late_fee_amount":     loan.LateFeeAmount,
+		"total_payoff":        amount,
 	})
 }
 
@@ -231,14 +234,15 @@ func (h *PaymentHandler) CalculateMinimum(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid loan ID")
 	}
 
-	amount, err := h.paymentService.CalculateMinimumPayment(c.Context(), loanID)
+	amount, loan, err := h.paymentService.CalculateMinimumPaymentDetailed(c.Context(), loanID)
 	if err != nil {
 		return response.NotFound(c, "Loan not found")
 	}
 
 	return response.OK(c, fiber.Map{
-		"loan_id":         loanID,
-		"minimum_payment": amount,
+		"loan_id":        loanID,
+		"minimum_amount": amount,
+		"due_date":       loan.DueDate,
 	})
 }
 

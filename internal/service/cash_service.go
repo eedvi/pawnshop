@@ -114,17 +114,17 @@ func (s *CashService) UpdateRegister(ctx context.Context, id int64, input Update
 
 // OpenSessionInput represents open session request data
 type OpenSessionInput struct {
-	BranchID      int64   `json:"branch_id" validate:"required"`
-	RegisterID    int64   `json:"register_id" validate:"required"`
-	UserID        int64   `json:"-"`
-	OpeningAmount float64 `json:"opening_amount" validate:"gte=0"`
-	OpeningNotes  *string `json:"opening_notes"`
+	BranchID         int64   `json:"branch_id" validate:"required"`
+	CashRegisterID   int64   `json:"cash_register_id" validate:"required"`
+	UserID           int64   `json:"-"`
+	OpeningAmount    float64 `json:"opening_amount" validate:"gte=0"`
+	OpeningNotes     *string `json:"opening_notes"`
 }
 
 // OpenSession opens a new cash session
 func (s *CashService) OpenSession(ctx context.Context, input OpenSessionInput) (*domain.CashSession, error) {
 	// Validate register
-	register, err := s.registerRepo.GetByID(ctx, input.RegisterID)
+	register, err := s.registerRepo.GetByID(ctx, input.CashRegisterID)
 	if err != nil {
 		return nil, errors.New("cash register not found")
 	}
@@ -144,19 +144,19 @@ func (s *CashService) OpenSession(ctx context.Context, input OpenSessionInput) (
 	}
 
 	// Check if register already has an open session
-	registerSession, _ := s.sessionRepo.GetOpenSessionByRegister(ctx, input.RegisterID)
+	registerSession, _ := s.sessionRepo.GetOpenSessionByRegister(ctx, input.CashRegisterID)
 	if registerSession != nil {
 		return nil, errors.New("register already has an open session")
 	}
 
 	session := &domain.CashSession{
-		BranchID:      input.BranchID,
-		RegisterID:    input.RegisterID,
-		UserID:        input.UserID,
-		Status:        domain.CashSessionStatusOpen,
-		OpeningAmount: input.OpeningAmount,
-		OpenedAt:      time.Now(),
-		OpeningNotes:  input.OpeningNotes,
+		BranchID:       input.BranchID,
+		CashRegisterID: input.CashRegisterID,
+		UserID:         input.UserID,
+		Status:         domain.CashSessionStatusOpen,
+		OpeningAmount:  input.OpeningAmount,
+		OpenedAt:       time.Now(),
+		OpeningNotes:   input.OpeningNotes,
 	}
 
 	if err := s.sessionRepo.Create(ctx, session); err != nil {

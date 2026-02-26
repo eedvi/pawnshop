@@ -9,7 +9,7 @@ export const cashRegisterFormSchema = z.object({
 export type CashRegisterFormValues = z.infer<typeof cashRegisterFormSchema>
 
 export const openSessionSchema = z.object({
-  register_id: z.number().min(1, 'La caja es requerida'),
+  cash_register_id: z.number().min(1, 'La caja es requerida'),
   opening_amount: z.number().min(0, 'El monto debe ser mayor o igual a 0'),
   notes: z.string().max(500, 'Máximo 500 caracteres').optional(),
 })

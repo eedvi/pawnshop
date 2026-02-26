@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -37,6 +38,16 @@ func (h *RoleHandler) Create(c *fiber.Ctx) error {
 		return response.BadRequest(c, err.Error())
 	}
 
+	// Audit log
+	if h.auditLogger != nil {
+		description := fmt.Sprintf("Rol '%s' creado con %d permisos", input.Name, len(input.Permissions))
+		h.auditLogger.LogCreateWithDescription(c, "role", role.ID, description, fiber.Map{
+			"name":        input.Name,
+			"description": input.Description,
+			"permissions": input.Permissions,
+		})
+	}
+
 	return response.Created(c, role)
 }
 
@@ -71,7 +82,7 @@ func (h *RoleHandler) GetByName(c *fiber.Ctx) error {
 func (h *RoleHandler) List(c *fiber.Ctx) error {
 	roles, err := h.roleService.List(c.Context())
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, roles)
@@ -93,9 +104,28 @@ func (h *RoleHandler) Update(c *fiber.Ctx) error {
 		return response.ValidationError(c, errors)
 	}
 
+	// Get original role for audit
+	originalRole, _ := h.roleService.GetByID(c.Context(), id)
+
 	role, err := h.roleService.Update(c.Context(), id, input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalRole != nil {
+		description := fmt.Sprintf("Rol '%s' actualizado", role.Name)
+		h.auditLogger.LogUpdateWithDescription(c, "role", id, description,
+			fiber.Map{
+				"name":        originalRole.Name,
+				"description": originalRole.Description,
+				"permissions": originalRole.Permissions,
+			},
+			fiber.Map{
+				"name":        role.Name,
+				"description": role.Description,
+				"permissions": role.Permissions,
+			})
 	}
 
 	return response.OK(c, role)
@@ -108,8 +138,21 @@ func (h *RoleHandler) Delete(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid role ID")
 	}
 
+	// Get original role for audit
+	originalRole, _ := h.roleService.GetByID(c.Context(), id)
+
 	if err := h.roleService.Delete(c.Context(), id); err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalRole != nil {
+		description := fmt.Sprintf("Rol '%s' eliminado", originalRole.Name)
+		h.auditLogger.LogDeleteWithDescription(c, "role", id, description, fiber.Map{
+			"name":        originalRole.Name,
+			"description": originalRole.Description,
+			"permissions": originalRole.Permissions,
+		})
 	}
 
 	return response.NoContent(c)

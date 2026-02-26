@@ -90,6 +90,7 @@ export default function LoanDetailPage() {
   const progressPercent = loan.total_amount > 0 ? (loan.amount_paid / loan.total_amount) * 100 : 0
   const canRenew = ['active', 'overdue'].includes(loan.status)
   const canConfiscate = ['overdue', 'defaulted'].includes(loan.status)
+  const canAcceptPayments = !['paid', 'confiscated'].includes(loan.status)
 
   const colorMap: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
     green: 'default',
@@ -119,12 +120,14 @@ export default function LoanDetailPage() {
                 Confiscar
               </Button>
             )}
-            <Button asChild>
-              <Link to={`/payments/new?loan_id=${loanId}`}>
-                <CreditCard className="mr-2 h-4 w-4" />
-                Registrar Pago
-              </Link>
-            </Button>
+            {canAcceptPayments && (
+              <Button asChild>
+                <Link to={`/payments/new?loan_id=${loanId}`}>
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  Registrar Pago
+                </Link>
+              </Button>
+            )}
           </div>
         }
       />

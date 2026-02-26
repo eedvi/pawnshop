@@ -110,9 +110,9 @@ export function useOpenCashSession() {
 
   return useMutation({
     mutationFn: (input: OpenCashSessionInput) => cashService.openSession(input),
-    onSuccess: (_, { register_id }) => {
+    onSuccess: (_, { cash_register_id }) => {
       queryClient.invalidateQueries({ queryKey: cashKeys.sessions() })
-      queryClient.invalidateQueries({ queryKey: cashKeys.currentSession(register_id) })
+      queryClient.invalidateQueries({ queryKey: cashKeys.currentSession(cash_register_id) })
     },
   })
 }

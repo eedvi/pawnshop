@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -36,6 +37,17 @@ func (h *CategoryHandler) Create(c *fiber.Ctx) error {
 	category, err := h.categoryService.Create(c.Context(), input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil {
+		description := fmt.Sprintf("Categoría '%s' creada", input.Name)
+		h.auditLogger.LogCreateWithDescription(c, "category", category.ID, description, fiber.Map{
+			"name":        input.Name,
+			"slug":        category.Slug,
+			"description": input.Description,
+			"parent_id":   input.ParentID,
+		})
 	}
 
 	return response.Created(c, category)
@@ -84,7 +96,7 @@ func (h *CategoryHandler) List(c *fiber.Ctx) error {
 
 	categories, err := h.categoryService.List(c.Context(), params)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, categories)
@@ -94,7 +106,7 @@ func (h *CategoryHandler) List(c *fiber.Ctx) error {
 func (h *CategoryHandler) ListTree(c *fiber.Ctx) error {
 	categories, err := h.categoryService.ListWithChildren(c.Context())
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, categories)
@@ -116,9 +128,30 @@ func (h *CategoryHandler) Update(c *fiber.Ctx) error {
 		return response.ValidationError(c, errors)
 	}
 
+	// Get original category for audit
+	originalCategory, _ := h.categoryService.GetByID(c.Context(), id)
+
 	category, err := h.categoryService.Update(c.Context(), id, input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalCategory != nil {
+		description := fmt.Sprintf("Categoría '%s' actualizada", category.Name)
+		h.auditLogger.LogUpdateWithDescription(c, "category", id, description,
+			fiber.Map{
+				"name":        originalCategory.Name,
+				"slug":        originalCategory.Slug,
+				"description": originalCategory.Description,
+				"parent_id":   originalCategory.ParentID,
+			},
+			fiber.Map{
+				"name":        category.Name,
+				"slug":        category.Slug,
+				"description": category.Description,
+				"parent_id":   category.ParentID,
+			})
 	}
 
 	return response.OK(c, category)
@@ -131,8 +164,22 @@ func (h *CategoryHandler) Delete(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid category ID")
 	}
 
+	// Get original category for audit
+	originalCategory, _ := h.categoryService.GetByID(c.Context(), id)
+
 	if err := h.categoryService.Delete(c.Context(), id); err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalCategory != nil {
+		description := fmt.Sprintf("Categoría '%s' eliminada", originalCategory.Name)
+		h.auditLogger.LogDeleteWithDescription(c, "category", id, description, fiber.Map{
+			"name":        originalCategory.Name,
+			"slug":        originalCategory.Slug,
+			"description": originalCategory.Description,
+			"parent_id":   originalCategory.ParentID,
+		})
 	}
 
 	return response.NoContent(c)

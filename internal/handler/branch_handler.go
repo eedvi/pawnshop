@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -36,6 +37,17 @@ func (h *BranchHandler) Create(c *fiber.Ctx) error {
 	branch, err := h.branchService.Create(c.Context(), input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil {
+		description := fmt.Sprintf("Sucursal '%s' (código: %s) creada", input.Name, input.Code)
+		h.auditLogger.LogCreateWithDescription(c, "branch", branch.ID, description, fiber.Map{
+			"name":    input.Name,
+			"code":    input.Code,
+			"address": input.Address,
+			"phone":   input.Phone,
+		})
 	}
 
 	return response.Created(c, branch)
@@ -79,7 +91,7 @@ func (h *BranchHandler) List(c *fiber.Ctx) error {
 
 	result, err := h.branchService.List(c.Context(), params)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.Paginated(c, result.Data, result.Page, result.PerPage, result.Total)
@@ -101,9 +113,30 @@ func (h *BranchHandler) Update(c *fiber.Ctx) error {
 		return response.ValidationError(c, errors)
 	}
 
+	// Get original branch for audit
+	originalBranch, _ := h.branchService.GetByID(c.Context(), id)
+
 	branch, err := h.branchService.Update(c.Context(), id, input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalBranch != nil {
+		description := fmt.Sprintf("Sucursal '%s' actualizada", branch.Name)
+		h.auditLogger.LogUpdateWithDescription(c, "branch", id, description,
+			fiber.Map{
+				"name":    originalBranch.Name,
+				"code":    originalBranch.Code,
+				"address": originalBranch.Address,
+				"phone":   originalBranch.Phone,
+			},
+			fiber.Map{
+				"name":    branch.Name,
+				"code":    branch.Code,
+				"address": branch.Address,
+				"phone":   branch.Phone,
+			})
 	}
 
 	return response.OK(c, branch)
@@ -116,8 +149,22 @@ func (h *BranchHandler) Delete(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid branch ID format")
 	}
 
+	// Get original branch for audit
+	originalBranch, _ := h.branchService.GetByID(c.Context(), id)
+
 	if err := h.branchService.Delete(c.Context(), id); err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalBranch != nil {
+		description := fmt.Sprintf("Sucursal '%s' (código: %s) eliminada", originalBranch.Name, originalBranch.Code)
+		h.auditLogger.LogDeleteWithDescription(c, "branch", id, description, fiber.Map{
+			"name":    originalBranch.Name,
+			"code":    originalBranch.Code,
+			"address": originalBranch.Address,
+			"phone":   originalBranch.Phone,
+		})
 	}
 
 	return response.NoContent(c)
@@ -130,8 +177,19 @@ func (h *BranchHandler) Activate(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid branch ID format")
 	}
 
+	// Get branch before activation for audit
+	branch, _ := h.branchService.GetByID(c.Context(), id)
+
 	if err := h.branchService.Activate(c.Context(), id); err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && branch != nil {
+		description := fmt.Sprintf("Sucursal '%s' activada", branch.Name)
+		h.auditLogger.LogCustomAction(c, "activate", "branch", id, description,
+			fiber.Map{"is_active": branch.IsActive},
+			fiber.Map{"is_active": true})
 	}
 
 	return response.OK(c, fiber.Map{"message": "Branch activated successfully"})
@@ -144,8 +202,19 @@ func (h *BranchHandler) Deactivate(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid branch ID format")
 	}
 
+	// Get branch before deactivation for audit
+	branch, _ := h.branchService.GetByID(c.Context(), id)
+
 	if err := h.branchService.Deactivate(c.Context(), id); err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && branch != nil {
+		description := fmt.Sprintf("Sucursal '%s' desactivada", branch.Name)
+		h.auditLogger.LogCustomAction(c, "deactivate", "branch", id, description,
+			fiber.Map{"is_active": branch.IsActive},
+			fiber.Map{"is_active": false})
 	}
 
 	return response.OK(c, fiber.Map{"message": "Branch deactivated successfully"})

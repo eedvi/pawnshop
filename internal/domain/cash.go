@@ -25,6 +25,7 @@ type CashRegister struct {
 	ID          int64   `json:"id"`
 	BranchID    int64   `json:"branch_id"`
 	Name        string  `json:"name"`
+	Code        string  `json:"code"`
 	Description *string `json:"description,omitempty"`
 	IsActive    bool    `json:"is_active"`
 
@@ -43,10 +44,10 @@ func (CashRegister) TableName() string {
 
 // CashSession represents a cash register session
 type CashSession struct {
-	ID         int64 `json:"id"`
-	BranchID   int64 `json:"branch_id"`
-	RegisterID int64 `json:"register_id"`
-	UserID     int64 `json:"user_id"`
+	ID               int64 `json:"id"`
+	BranchID         int64 `json:"branch_id"`
+	CashRegisterID   int64 `json:"cash_register_id"`
+	UserID           int64 `json:"user_id"`
 
 	// Amounts
 	OpeningAmount  float64  `json:"opening_amount"`
@@ -73,7 +74,7 @@ type CashSession struct {
 	UpdatedAt time.Time `json:"updated_at"`
 
 	// Relations
-	CashRegister *CashRegister   `json:"cash_register,omitempty"`
+	CashRegister *CashRegister   `json:"register,omitempty"`
 	User         *User           `json:"user,omitempty"`
 	Branch       *Branch         `json:"branch,omitempty"`
 	Movements    []*CashMovement `json:"movements,omitempty"`

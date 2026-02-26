@@ -8,7 +8,21 @@ export const customerFormSchema = z.object({
     required_error: 'El tipo de documento es requerido',
   }),
   identity_number: z.string().min(1, 'El número de documento es requerido').max(50, 'Máximo 50 caracteres'),
-  birth_date: z.string().optional(),
+  birth_date: z.string().optional().refine((val) => {
+    if (!val) return true // optional field
+    const birthDate = new Date(val)
+    const today = new Date()
+    const age = today.getFullYear() - birthDate.getFullYear()
+    const monthDiff = today.getMonth() - birthDate.getMonth()
+    const dayDiff = today.getDate() - birthDate.getDate()
+
+    // Adjust age if birthday hasn't occurred yet this year
+    const adjustedAge = monthDiff < 0 || (monthDiff === 0 && dayDiff < 0) ? age - 1 : age
+
+    return adjustedAge >= 18
+  }, {
+    message: 'El cliente debe tener al menos 18 años de edad'
+  }),
   gender: z.enum(['male', 'female', 'other', '__none__']).optional().transform(val => val === '__none__' ? undefined : val),
 
   // Contact info

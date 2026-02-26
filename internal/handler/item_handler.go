@@ -128,7 +128,7 @@ func (h *ItemHandler) List(c *fiber.Ctx) error {
 
 	result, err := h.itemService.List(c.Context(), params)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.Paginated(c, result.Data, result.Page, result.PerPage, result.Total)
@@ -297,7 +297,7 @@ func (h *ItemHandler) GetForSale(c *fiber.Ctx) error {
 
 	items, err := h.itemService.GetAvailableForSale(c.Context(), branchID)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, items)
@@ -363,7 +363,7 @@ func (h *ItemHandler) GetPendingDeliveries(c *fiber.Ctx) error {
 
 	items, err := h.itemService.GetPendingDeliveries(c.Context(), branchID)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, items)

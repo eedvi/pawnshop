@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -12,11 +13,13 @@ import (
 
 type ExpenseHandler struct {
 	expenseService service.ExpenseService
+	auditLogger    *middleware.AuditLogger
 }
 
-func NewExpenseHandler(expenseService service.ExpenseService) *ExpenseHandler {
+func NewExpenseHandler(expenseService service.ExpenseService, auditLogger *middleware.AuditLogger) *ExpenseHandler {
 	return &ExpenseHandler{
 		expenseService: expenseService,
+		auditLogger:    auditLogger,
 	}
 }
 
@@ -147,6 +150,18 @@ func (h *ExpenseHandler) Create(c *fiber.Ctx) error {
 		return handleServiceError(c, err)
 	}
 
+	// Audit log
+	if h.auditLogger != nil {
+		description := fmt.Sprintf("Gasto #%s creado por Q%.2f (%s)", expense.ExpenseNumber, expense.Amount, req.Description)
+		h.auditLogger.LogCreateWithDescription(c, "expense", expense.ID, description, fiber.Map{
+			"expense_number": expense.ExpenseNumber,
+			"amount":         expense.Amount,
+			"category_id":    req.CategoryID,
+			"description":    req.Description,
+			"payment_method": req.PaymentMethod,
+		})
+	}
+
 	return c.Status(fiber.StatusCreated).JSON(expense)
 }
 
@@ -197,9 +212,29 @@ func (h *ExpenseHandler) Update(c *fiber.Ctx) error {
 		})
 	}
 
+	// Get original expense for audit
+	originalExpense, _ := h.expenseService.GetByID(c.Context(), id)
+
 	expense, err := h.expenseService.Update(c.Context(), id, req)
 	if err != nil {
 		return handleServiceError(c, err)
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalExpense != nil {
+		description := fmt.Sprintf("Gasto #%s actualizado", originalExpense.ExpenseNumber)
+
+		oldValues := fiber.Map{
+			"amount":      originalExpense.Amount,
+			"description": originalExpense.Description,
+		}
+
+		newValues := fiber.Map{
+			"amount":      req.Amount,
+			"description": req.Description,
+		}
+
+		h.auditLogger.LogUpdateWithDescription(c, "expense", id, description, oldValues, newValues)
 	}
 
 	return c.JSON(expense)
@@ -219,8 +254,21 @@ func (h *ExpenseHandler) Delete(c *fiber.Ctx) error {
 		})
 	}
 
+	// Get expense before deleting for audit
+	expense, _ := h.expenseService.GetByID(c.Context(), id)
+
 	if err := h.expenseService.Delete(c.Context(), id); err != nil {
 		return handleServiceError(c, err)
+	}
+
+	// Audit log
+	if h.auditLogger != nil && expense != nil {
+		description := fmt.Sprintf("Gasto #%s eliminado por Q%.2f", expense.ExpenseNumber, expense.Amount)
+		h.auditLogger.LogDeleteWithDescription(c, "expense", id, description, fiber.Map{
+			"expense_number": expense.ExpenseNumber,
+			"amount":         expense.Amount,
+			"description":    expense.Description,
+		})
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -348,9 +396,26 @@ func (h *ExpenseHandler) Approve(c *fiber.Ctx) error {
 
 	userID := c.Locals("userID").(int64)
 
+	// Get expense before approving for audit
+	originalExpense, _ := h.expenseService.GetByID(c.Context(), id)
+
 	expense, err := h.expenseService.Approve(c.Context(), id, userID)
 	if err != nil {
 		return handleServiceError(c, err)
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalExpense != nil {
+		description := fmt.Sprintf("Gasto #%s aprobado por Q%.2f", originalExpense.ExpenseNumber, originalExpense.Amount)
+		h.auditLogger.LogCustomAction(c, "approve", "expense", id, description,
+			fiber.Map{
+				"is_approved": originalExpense.IsApproved,
+			},
+			fiber.Map{
+				"is_approved": true,
+				"approved_at": "now",
+				"approved_by": userID,
+			})
 	}
 
 	return c.JSON(expense)

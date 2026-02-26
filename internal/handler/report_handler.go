@@ -26,7 +26,7 @@ func (h *ReportHandler) GetDashboard(c *fiber.Ctx) error {
 
 	stats, err := h.reportService.GetDashboardStats(c.Context(), int64(branchID))
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, stats)
@@ -40,7 +40,7 @@ func (h *ReportHandler) GetLoanReport(c *fiber.Ctx) error {
 
 	report, err := h.reportService.GetLoanReport(c.Context(), int64(branchID), dateFrom, dateTo)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, report)
@@ -54,7 +54,7 @@ func (h *ReportHandler) GetPaymentReport(c *fiber.Ctx) error {
 
 	report, err := h.reportService.GetPaymentReport(c.Context(), int64(branchID), dateFrom, dateTo)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, report)
@@ -68,7 +68,7 @@ func (h *ReportHandler) GetSalesReport(c *fiber.Ctx) error {
 
 	report, err := h.reportService.GetSalesReport(c.Context(), int64(branchID), dateFrom, dateTo)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, report)
@@ -80,7 +80,7 @@ func (h *ReportHandler) GetOverdueReport(c *fiber.Ctx) error {
 
 	report, err := h.reportService.GetOverdueReport(c.Context(), int64(branchID))
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, report)

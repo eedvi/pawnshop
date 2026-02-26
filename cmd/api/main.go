@@ -158,7 +158,7 @@ func main() {
 	loanHandler := handler.NewLoanHandler(loanService, auditLogger, log.Logger)
 	paymentHandler := handler.NewPaymentHandler(paymentService, auditLogger, log.Logger)
 	saleHandler := handler.NewSaleHandler(saleService, auditLogger)
-	cashHandler := handler.NewCashHandler(cashService)
+	cashHandler := handler.NewCashHandler(cashService, auditLogger)
 	branchHandler := handler.NewBranchHandler(branchService, auditLogger)
 	categoryHandler := handler.NewCategoryHandler(categoryService, auditLogger)
 	roleHandler := handler.NewRoleHandler(roleService, auditLogger)
@@ -168,7 +168,7 @@ func main() {
 
 	// New handlers for transfers, expenses, and notifications
 	transferHandler := handler.NewTransferHandler(transferService)
-	expenseHandler := handler.NewExpenseHandler(expenseService)
+	expenseHandler := handler.NewExpenseHandler(expenseService, auditLogger)
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	twoFactorHandler := handler.NewTwoFactorHandler(twoFactorService, userService)
 	loyaltyHandler := handler.NewLoyaltyHandler(loyaltyService)
@@ -326,6 +326,24 @@ func errorHandler(c *fiber.Ctx, err error) error {
 		code = e.Code
 		message = e.Message
 	}
+
+	// Log the error with details
+	requestID := c.Get("X-Request-ID")
+	logEvent := log.Error().
+		Err(err).
+		Str("request_id", requestID).
+		Str("method", c.Method()).
+		Str("path", c.Path()).
+		Int("status", code)
+
+	// Add user ID if available
+	if userID := c.Locals("user_id"); userID != nil {
+		if uid, ok := userID.(int64); ok {
+			logEvent.Int64("user_id", uid)
+		}
+	}
+
+	logEvent.Msg("Unhandled error in request")
 
 	return c.Status(code).JSON(fiber.Map{
 		"success": false,

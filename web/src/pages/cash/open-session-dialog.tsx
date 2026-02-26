@@ -33,7 +33,7 @@ export function OpenSessionDialog({
   const form = useForm<OpenSessionFormValues>({
     resolver: zodResolver(openSessionSchema),
     defaultValues: {
-      register_id: register?.id || 0,
+      cash_register_id: register?.id || 0,
       opening_amount: 0,
       notes: '',
     },
@@ -42,7 +42,7 @@ export function OpenSessionDialog({
   const handleSubmit = (values: OpenSessionFormValues) => {
     onConfirm({
       ...values,
-      register_id: register?.id || 0,
+      cash_register_id: register?.id || 0,
     })
   }
 

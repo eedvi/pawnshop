@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -45,6 +46,20 @@ func (h *SaleHandler) Create(c *fiber.Ctx) error {
 	result, err := h.saleService.Create(c.Context(), input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil {
+		description := fmt.Sprintf("Venta #%s creada por Q%.2f (artículo #%d)", result.Sale.SaleNumber, result.Sale.FinalPrice, input.ItemID)
+		h.auditLogger.LogCreateWithDescription(c, "sale", result.Sale.ID, description, fiber.Map{
+			"sale_number":    result.Sale.SaleNumber,
+			"final_price":    result.Sale.FinalPrice,
+			"sale_price":     result.Sale.SalePrice,
+			"discount":       result.Sale.DiscountAmount,
+			"payment_method": input.PaymentMethod,
+			"item_id":        input.ItemID,
+			"customer_id":    input.CustomerID,
+		})
 	}
 
 	return response.Created(c, result)
@@ -120,7 +135,7 @@ func (h *SaleHandler) List(c *fiber.Ctx) error {
 
 	result, err := h.saleService.List(c.Context(), params)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.Paginated(c, result.Data, result.Page, result.PerPage, result.Total)
@@ -145,6 +160,9 @@ func (h *SaleHandler) Refund(c *fiber.Ctx) error {
 		return response.ValidationError(c, errors)
 	}
 
+	// Get sale before refund for audit
+	originalSale, _ := h.saleService.GetByID(c.Context(), id)
+
 	user := middleware.GetUser(c)
 	sale, err := h.saleService.Refund(c.Context(), service.RefundSaleInput{
 		SaleID:       id,
@@ -154,6 +172,21 @@ func (h *SaleHandler) Refund(c *fiber.Ctx) error {
 	})
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalSale != nil {
+		description := fmt.Sprintf("Venta #%s reembolsada por Q%.2f. Razón: %s", originalSale.SaleNumber, input.RefundAmount, input.Reason)
+		h.auditLogger.LogCustomAction(c, "refund", "sale", id, description,
+			fiber.Map{
+				"final_price": originalSale.FinalPrice,
+				"status":      originalSale.Status,
+			},
+			fiber.Map{
+				"refund_amount": input.RefundAmount,
+				"refund_reason": input.Reason,
+				"refunded_at":   "now",
+			})
 	}
 
 	return response.OK(c, sale)
@@ -183,7 +216,7 @@ func (h *SaleHandler) GetSummary(c *fiber.Ctx) error {
 
 	summary, err := h.saleService.GetSalesSummary(c.Context(), branchID, dateFrom, dateTo)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, summary)

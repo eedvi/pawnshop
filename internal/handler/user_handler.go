@@ -129,7 +129,7 @@ func (h *UserHandler) List(c *fiber.Ctx) error {
 
 	result, err := h.userService.List(c.Context(), params)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.Paginated(c, result.Data, result.Page, result.PerPage, result.Total)

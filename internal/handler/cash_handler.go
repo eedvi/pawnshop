@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -15,11 +16,12 @@ import (
 // CashHandler handles cash/POS endpoints
 type CashHandler struct {
 	cashService *service.CashService
+	auditLogger *middleware.AuditLogger
 }
 
 // NewCashHandler creates a new CashHandler
-func NewCashHandler(cashService *service.CashService) *CashHandler {
-	return &CashHandler{cashService: cashService}
+func NewCashHandler(cashService *service.CashService, auditLogger *middleware.AuditLogger) *CashHandler {
+	return &CashHandler{cashService: cashService, auditLogger: auditLogger}
 }
 
 // === Cash Register Endpoints ===
@@ -81,7 +83,7 @@ func (h *CashHandler) ListRegisters(c *fiber.Ctx) error {
 
 	registers, err := h.cashService.ListRegisters(c.Context(), branchID)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, registers)
@@ -133,6 +135,16 @@ func (h *CashHandler) OpenSession(c *fiber.Ctx) error {
 	session, err := h.cashService.OpenSession(c.Context(), input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil {
+		description := fmt.Sprintf("Sesión de caja abierta con monto inicial Q%.2f (caja #%d)", input.OpeningAmount, input.CashRegisterID)
+		h.auditLogger.LogCreateWithDescription(c, "cash_session", session.ID, description, fiber.Map{
+			"cash_register_id": input.CashRegisterID,
+			"opening_amount":   input.OpeningAmount,
+			"opening_notes":    input.OpeningNotes,
+		})
 	}
 
 	return response.Created(c, session)
@@ -208,7 +220,7 @@ func (h *CashHandler) ListSessions(c *fiber.Ctx) error {
 
 	result, err := h.cashService.ListSessions(c.Context(), params)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.Paginated(c, result.Data, result.Page, result.PerPage, result.Total)
@@ -229,6 +241,9 @@ func (h *CashHandler) CloseSession(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Error parsing request body: "+err.Error())
 	}
 
+	// Get session before closing for audit
+	originalSession, _ := h.cashService.GetSession(c.Context(), id)
+
 	user := middleware.GetUser(c)
 	session, err := h.cashService.CloseSession(c.Context(), service.CloseSessionInput{
 		SessionID:     id,
@@ -238,6 +253,23 @@ func (h *CashHandler) CloseSession(c *fiber.Ctx) error {
 	})
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil && originalSession != nil {
+		description := fmt.Sprintf("Sesión de caja cerrada con monto final Q%.2f (diferencia: Q%.2f)",
+			input.ClosingAmount, session.Difference)
+		h.auditLogger.LogCustomAction(c, "close", "cash_session", id, description,
+			fiber.Map{
+				"status":         originalSession.Status,
+				"opening_amount": originalSession.OpeningAmount,
+			},
+			fiber.Map{
+				"status":         session.Status,
+				"closing_amount": session.ClosingAmount,
+				"difference":     session.Difference,
+				"closing_notes":  input.ClosingNotes,
+			})
 	}
 
 	return response.OK(c, session)
@@ -276,6 +308,22 @@ func (h *CashHandler) CreateMovement(c *fiber.Ctx) error {
 	movement, err := h.cashService.CreateMovement(c.Context(), input)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
+	}
+
+	// Audit log
+	if h.auditLogger != nil {
+		movementTypeText := "ingreso"
+		if input.MovementType == "expense" {
+			movementTypeText = "egreso"
+		}
+		description := fmt.Sprintf("Movimiento de caja: %s de Q%.2f (%s)", movementTypeText, input.Amount, input.Description)
+		h.auditLogger.LogCreateWithDescription(c, "cash_movement", movement.ID, description, fiber.Map{
+			"session_id":     input.SessionID,
+			"movement_type":  input.MovementType,
+			"payment_method": input.PaymentMethod,
+			"amount":         input.Amount,
+			"description":    input.Description,
+		})
 	}
 
 	return response.Created(c, movement)
@@ -339,7 +387,7 @@ func (h *CashHandler) ListMovements(c *fiber.Ctx) error {
 
 	result, err := h.cashService.ListMovements(c.Context(), params)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.Paginated(c, result.Data, result.Page, result.PerPage, result.Total)
@@ -354,7 +402,7 @@ func (h *CashHandler) ListSessionMovements(c *fiber.Ctx) error {
 
 	movements, err := h.cashService.ListSessionMovements(c.Context(), id)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, movements)
@@ -375,7 +423,7 @@ func (h *CashHandler) RegisterRoutes(app fiber.Router, authMiddleware *middlewar
 	// Cash sessions
 	sessions := cash.Group("/sessions")
 	sessions.Get("/", authMiddleware.RequirePermission("cash.read"), h.ListSessions)
-	sessions.Post("/", authMiddleware.RequirePermission("cash.create"), h.OpenSession)
+	sessions.Post("/open", authMiddleware.RequirePermission("cash.create"), h.OpenSession)
 	sessions.Get("/current", authMiddleware.RequirePermission("cash.read"), h.GetCurrentSession)
 	sessions.Get("/:id", authMiddleware.RequirePermission("cash.read"), h.GetSession)
 	sessions.Post("/:id/close", authMiddleware.RequirePermission("cash.update"), h.CloseSession)

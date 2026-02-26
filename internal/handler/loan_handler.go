@@ -178,7 +178,7 @@ func (h *LoanHandler) List(c *fiber.Ctx) error {
 
 	result, err := h.loanService.List(c.Context(), params)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.Paginated(c, result.Data, result.Page, result.PerPage, result.Total)
@@ -323,7 +323,7 @@ func (h *LoanHandler) GetOverdue(c *fiber.Ctx) error {
 
 	loans, err := h.loanService.GetOverdueLoans(c.Context(), branchID)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, loans)

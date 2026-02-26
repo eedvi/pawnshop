@@ -322,7 +322,7 @@ func (g *ThermalTicketGenerator) GenerateCashCutTicket(cutType string, session *
 
 	// Session info
 	m.AddRow(3, text.NewCol(12, fmt.Sprintf("Sesion: %d", session.ID), props.Text{Size: 7}))
-	m.AddRow(3, text.NewCol(12, fmt.Sprintf("Caja: %d", session.RegisterID), props.Text{Size: 7}))
+	m.AddRow(3, text.NewCol(12, fmt.Sprintf("Caja: %d", session.CashRegisterID), props.Text{Size: 7}))
 	m.AddRow(3, text.NewCol(12, fmt.Sprintf("Apertura: %s", session.OpenedAt.Format("02/01/06 15:04")), props.Text{Size: 6}))
 
 	g.addSeparator(m)

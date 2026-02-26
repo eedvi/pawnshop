@@ -137,7 +137,7 @@ func NewCashSessionRepository(db *DB) *CashSessionRepository {
 // GetByID retrieves a cash session by ID
 func (r *CashSessionRepository) GetByID(ctx context.Context, id int64) (*domain.CashSession, error) {
 	query := `
-		SELECT id, branch_id, register_id, user_id, status,
+		SELECT id, branch_id, cash_register_id, user_id, status,
 			   opening_amount, closing_amount, expected_amount, difference,
 			   opened_at, closed_at, closed_by, opening_notes, closing_notes,
 			   created_at, updated_at
@@ -151,7 +151,7 @@ func (r *CashSessionRepository) GetByID(ctx context.Context, id int64) (*domain.
 // GetOpenSession retrieves an open session for a user
 func (r *CashSessionRepository) GetOpenSession(ctx context.Context, userID int64) (*domain.CashSession, error) {
 	query := `
-		SELECT id, branch_id, register_id, user_id, status,
+		SELECT id, branch_id, cash_register_id, user_id, status,
 			   opening_amount, closing_amount, expected_amount, difference,
 			   opened_at, closed_at, closed_by, opening_notes, closing_notes,
 			   created_at, updated_at
@@ -167,12 +167,12 @@ func (r *CashSessionRepository) GetOpenSession(ctx context.Context, userID int64
 // GetOpenSessionByRegister retrieves an open session for a register
 func (r *CashSessionRepository) GetOpenSessionByRegister(ctx context.Context, registerID int64) (*domain.CashSession, error) {
 	query := `
-		SELECT id, branch_id, register_id, user_id, status,
+		SELECT id, branch_id, cash_register_id, user_id, status,
 			   opening_amount, closing_amount, expected_amount, difference,
 			   opened_at, closed_at, closed_by, opening_notes, closing_notes,
 			   created_at, updated_at
 		FROM cash_sessions
-		WHERE register_id = $1 AND status = 'open'
+		WHERE cash_register_id = $1 AND status = 'open'
 		ORDER BY opened_at DESC
 		LIMIT 1
 	`
@@ -189,57 +189,57 @@ func (r *CashSessionRepository) List(ctx context.Context, params repository.Cash
 		params.PerPage = 20
 	}
 
-	baseQuery := `FROM cash_sessions WHERE 1=1`
+	whereClause := `WHERE 1=1`
 	args := []interface{}{}
 	argCount := 0
 
 	if params.BranchID > 0 {
 		argCount++
-		baseQuery += fmt.Sprintf(" AND branch_id = $%d", argCount)
+		whereClause += fmt.Sprintf(" AND cs.branch_id = $%d", argCount)
 		args = append(args, params.BranchID)
 	}
 
 	if params.UserID != nil {
 		argCount++
-		baseQuery += fmt.Sprintf(" AND user_id = $%d", argCount)
+		whereClause += fmt.Sprintf(" AND cs.user_id = $%d", argCount)
 		args = append(args, *params.UserID)
 	}
 
 	if params.RegisterID != nil {
 		argCount++
-		baseQuery += fmt.Sprintf(" AND register_id = $%d", argCount)
+		whereClause += fmt.Sprintf(" AND cs.cash_register_id = $%d", argCount)
 		args = append(args, *params.RegisterID)
 	}
 
 	if params.Status != nil {
 		argCount++
-		baseQuery += fmt.Sprintf(" AND status = $%d", argCount)
+		whereClause += fmt.Sprintf(" AND cs.status = $%d", argCount)
 		args = append(args, *params.Status)
 	}
 
 	if params.DateFrom != nil {
 		argCount++
-		baseQuery += fmt.Sprintf(" AND opened_at >= $%d", argCount)
+		whereClause += fmt.Sprintf(" AND cs.opened_at >= $%d", argCount)
 		args = append(args, *params.DateFrom)
 	}
 
 	if params.DateTo != nil {
 		argCount++
-		baseQuery += fmt.Sprintf(" AND opened_at <= $%d", argCount)
+		whereClause += fmt.Sprintf(" AND cs.opened_at <= $%d", argCount)
 		args = append(args, *params.DateTo)
 	}
 
 	// Count total
 	var total int
-	countQuery := "SELECT COUNT(*) " + baseQuery
+	countQuery := "SELECT COUNT(*) FROM cash_sessions cs " + whereClause
 	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, fmt.Errorf("failed to count cash sessions: %w", err)
 	}
 
 	// Get data
-	orderBy := "opened_at"
+	orderBy := "cs.opened_at"
 	if params.OrderBy != "" {
-		orderBy = params.OrderBy
+		orderBy = "cs." + params.OrderBy
 	}
 	order := "DESC"
 	if params.Order == "asc" {
@@ -247,13 +247,20 @@ func (r *CashSessionRepository) List(ctx context.Context, params repository.Cash
 	}
 
 	offset := (params.Page - 1) * params.PerPage
+
 	dataQuery := fmt.Sprintf(`
-		SELECT id, branch_id, register_id, user_id, status,
-			   opening_amount, closing_amount, expected_amount, difference,
-			   opened_at, closed_at, closed_by, opening_notes, closing_notes,
-			   created_at, updated_at
-		%s ORDER BY %s %s LIMIT $%d OFFSET $%d`,
-		baseQuery, orderBy, order, argCount+1, argCount+2,
+		SELECT cs.id, cs.branch_id, cs.cash_register_id, cs.user_id, cs.status,
+			   cs.opening_amount, cs.closing_amount, cs.expected_amount, cs.difference,
+			   cs.opened_at, cs.closed_at, cs.closed_by, cs.opening_notes, cs.closing_notes,
+			   cs.created_at, cs.updated_at,
+			   cr.id, cr.branch_id, cr.name, cr.code, cr.description, cr.is_active, cr.created_at, cr.updated_at,
+			   u.id, u.branch_id, u.first_name, u.last_name, u.email, u.phone
+		FROM cash_sessions cs
+		LEFT JOIN cash_registers cr ON cs.cash_register_id = cr.id
+		LEFT JOIN users u ON cs.user_id = u.id AND u.deleted_at IS NULL
+		%s
+		ORDER BY %s %s LIMIT $%d OFFSET $%d`,
+		whereClause, orderBy, order, argCount+1, argCount+2,
 	)
 	args = append(args, params.PerPage, offset)
 
@@ -265,7 +272,7 @@ func (r *CashSessionRepository) List(ctx context.Context, params repository.Cash
 
 	sessions := []domain.CashSession{}
 	for rows.Next() {
-		session, err := r.scanSessionRow(rows)
+		session, err := r.scanSessionRowWithRelations(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -289,13 +296,13 @@ func (r *CashSessionRepository) List(ctx context.Context, params repository.Cash
 // Create creates a new cash session
 func (r *CashSessionRepository) Create(ctx context.Context, session *domain.CashSession) error {
 	query := `
-		INSERT INTO cash_sessions (branch_id, register_id, user_id, status, opening_amount, opened_at, opening_notes)
+		INSERT INTO cash_sessions (branch_id, cash_register_id, user_id, status, opening_amount, opened_at, opening_notes)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at, updated_at
 	`
 
 	err := r.db.QueryRowContext(ctx, query,
-		session.BranchID, session.RegisterID, session.UserID, session.Status,
+		session.BranchID, session.CashRegisterID, session.UserID, session.Status,
 		session.OpeningAmount, session.OpenedAt, NullStringPtr(session.OpeningNotes),
 	).Scan(&session.ID, &session.CreatedAt, &session.UpdatedAt)
 
@@ -365,7 +372,7 @@ func (r *CashSessionRepository) scanSession(row *sql.Row) (*domain.CashSession, 
 	var openingNotes, closingNotes sql.NullString
 
 	err := row.Scan(
-		&session.ID, &session.BranchID, &session.RegisterID, &session.UserID, &session.Status,
+		&session.ID, &session.BranchID, &session.CashRegisterID, &session.UserID, &session.Status,
 		&session.OpeningAmount, &closingAmount, &expectedAmount, &difference,
 		&session.OpenedAt, &closedAt, &closedBy, &openingNotes, &closingNotes,
 		&session.CreatedAt, &session.UpdatedAt,
@@ -399,7 +406,7 @@ func (r *CashSessionRepository) scanSessionRow(rows *sql.Rows) (*domain.CashSess
 	var openingNotes, closingNotes sql.NullString
 
 	err := rows.Scan(
-		&session.ID, &session.BranchID, &session.RegisterID, &session.UserID, &session.Status,
+		&session.ID, &session.BranchID, &session.CashRegisterID, &session.UserID, &session.Status,
 		&session.OpeningAmount, &closingAmount, &expectedAmount, &difference,
 		&session.OpenedAt, &closedAt, &closedBy, &openingNotes, &closingNotes,
 		&session.CreatedAt, &session.UpdatedAt,
@@ -418,6 +425,78 @@ func (r *CashSessionRepository) scanSessionRow(rows *sql.Rows) (*domain.CashSess
 	session.ClosedBy = Int64Ptr(closedBy)
 	session.OpeningNotes = StringPtrVal(openingNotes)
 	session.ClosingNotes = StringPtrVal(closingNotes)
+
+	return session, nil
+}
+
+func (r *CashSessionRepository) scanSessionRowWithRelations(rows *sql.Rows) (*domain.CashSession, error) {
+	session := &domain.CashSession{}
+	var closingAmount, expectedAmount, difference sql.NullFloat64
+	var closedAt sql.NullTime
+	var closedBy sql.NullInt64
+	var openingNotes, closingNotes sql.NullString
+
+	// Register fields
+	var registerID, registerBranchID sql.NullInt64
+	var registerName, registerCode sql.NullString
+	var registerDescription sql.NullString
+	var registerIsActive sql.NullBool
+	var registerCreatedAt, registerUpdatedAt sql.NullTime
+
+	// User fields
+	var userID, userBranchID sql.NullInt64
+	var userFirstName, userLastName, userEmail, userPhone sql.NullString
+
+	err := rows.Scan(
+		&session.ID, &session.BranchID, &session.CashRegisterID, &session.UserID, &session.Status,
+		&session.OpeningAmount, &closingAmount, &expectedAmount, &difference,
+		&session.OpenedAt, &closedAt, &closedBy, &openingNotes, &closingNotes,
+		&session.CreatedAt, &session.UpdatedAt,
+		// Register
+		&registerID, &registerBranchID, &registerName, &registerCode, &registerDescription, &registerIsActive, &registerCreatedAt, &registerUpdatedAt,
+		// User
+		&userID, &userBranchID, &userFirstName, &userLastName, &userEmail, &userPhone,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan cash session with relations: %w", err)
+	}
+
+	session.ClosingAmount = Float64Ptr(closingAmount)
+	session.ExpectedAmount = Float64Ptr(expectedAmount)
+	session.Difference = Float64Ptr(difference)
+	if closedAt.Valid {
+		session.ClosedAt = &closedAt.Time
+	}
+	session.ClosedBy = Int64Ptr(closedBy)
+	session.OpeningNotes = StringPtrVal(openingNotes)
+	session.ClosingNotes = StringPtrVal(closingNotes)
+
+	// Populate register
+	if registerID.Valid {
+		session.CashRegister = &domain.CashRegister{
+			ID:          registerID.Int64,
+			BranchID:    registerBranchID.Int64,
+			Name:        registerName.String,
+			Code:        registerCode.String,
+			Description: StringPtrVal(registerDescription),
+			IsActive:    registerIsActive.Bool,
+			CreatedAt:   registerCreatedAt.Time,
+			UpdatedAt:   registerUpdatedAt.Time,
+		}
+	}
+
+	// Populate user
+	if userID.Valid {
+		session.User = &domain.User{
+			ID:        userID.Int64,
+			BranchID:  Int64Ptr(userBranchID),
+			FirstName: userFirstName.String,
+			LastName:  userLastName.String,
+			Email:     userEmail.String,
+			Phone:     userPhone.String,
+		}
+	}
 
 	return session, nil
 }

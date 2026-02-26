@@ -20,6 +20,7 @@ export interface CashRegister {
   id: number
   branch_id: number
   name: string
+  code: string
   description?: string
   is_active: boolean
   created_at: string
@@ -29,7 +30,7 @@ export interface CashRegister {
 
 export interface CashSession {
   id: number
-  register_id: number
+  cash_register_id: number
   branch_id: number
   user_id: number
   opening_amount: number
@@ -44,7 +45,7 @@ export interface CashSession {
   closed_by?: number
   created_at: string
   updated_at: string
-  cash_register?: CashRegister
+  register?: CashRegister
   branch?: Branch
   user?: User
   movements?: CashMovement[]
@@ -80,7 +81,7 @@ export interface UpdateCashRegisterInput {
 }
 
 export interface OpenCashSessionInput {
-  register_id: number
+  cash_register_id: number
   opening_amount: number
   opening_notes?: string
 }

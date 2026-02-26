@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 )
 
 // Response is the standard API response structure
@@ -195,6 +196,32 @@ func InternalError(c *fiber.Ctx, message string) error {
 	if message == "" {
 		message = "An internal server error occurred"
 	}
+
+	// Log the error
+	requestID := c.Get("X-Request-ID")
+	log.Error().
+		Str("request_id", requestID).
+		Str("method", c.Method()).
+		Str("path", c.Path()).
+		Str("error_message", message).
+		Msg("Internal server error")
+
+	return Error(c, fiber.StatusInternalServerError, "INTERNAL_ERROR", message)
+}
+
+// InternalErrorWithErr sends a 500 error and logs the underlying error
+func InternalErrorWithErr(c *fiber.Ctx, err error) error {
+	message := "An internal server error occurred"
+
+	// Log the detailed error
+	requestID := c.Get("X-Request-ID")
+	log.Error().
+		Err(err).
+		Str("request_id", requestID).
+		Str("method", c.Method()).
+		Str("path", c.Path()).
+		Msg("Internal server error")
+
 	return Error(c, fiber.StatusInternalServerError, "INTERNAL_ERROR", message)
 }
 

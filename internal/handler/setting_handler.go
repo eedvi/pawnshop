@@ -38,7 +38,7 @@ func (h *SettingHandler) List(c *fiber.Ctx) error {
 
 	settings, err := h.settingService.GetAll(c.Context(), branchID)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, settings)
@@ -50,7 +50,7 @@ func (h *SettingHandler) GetMerged(c *fiber.Ctx) error {
 
 	settings, err := h.settingService.GetMerged(c.Context(), branchID)
 	if err != nil {
-		return response.InternalError(c, "")
+		return response.InternalErrorWithErr(c, err)
 	}
 
 	return response.OK(c, settings)
