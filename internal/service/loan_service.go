@@ -9,15 +9,17 @@ import (
 	"github.com/rs/zerolog"
 	"pawnshop/internal/domain"
 	"pawnshop/internal/repository"
+	"pawnshop/pkg/logger"
 )
 
 // LoanService handles loan business logic
 type LoanService struct {
-	loanRepo     repository.LoanRepository
-	itemRepo     repository.ItemRepository
-	customerRepo repository.CustomerRepository
-	paymentRepo  repository.PaymentRepository
-	logger       zerolog.Logger
+	loanRepo       repository.LoanRepository
+	itemRepo       repository.ItemRepository
+	customerRepo   repository.CustomerRepository
+	paymentRepo    repository.PaymentRepository
+	logger         zerolog.Logger
+	businessLogger *logger.BusinessLogger
 }
 
 // NewLoanService creates a new LoanService
@@ -26,14 +28,16 @@ func NewLoanService(
 	itemRepo repository.ItemRepository,
 	customerRepo repository.CustomerRepository,
 	paymentRepo repository.PaymentRepository,
-	logger zerolog.Logger,
+	log zerolog.Logger,
 ) *LoanService {
+	serviceLogger := log.With().Str("service", "loan").Logger()
 	return &LoanService{
-		loanRepo:     loanRepo,
-		itemRepo:     itemRepo,
-		customerRepo: customerRepo,
-		paymentRepo:  paymentRepo,
-		logger:       logger.With().Str("service", "loan").Logger(),
+		loanRepo:       loanRepo,
+		itemRepo:       itemRepo,
+		customerRepo:   customerRepo,
+		paymentRepo:    paymentRepo,
+		logger:         serviceLogger,
+		businessLogger: logger.NewBusinessLogger(serviceLogger),
 	}
 }
 
@@ -223,6 +227,9 @@ func (s *LoanService) Create(ctx context.Context, input CreateLoanInput) (*domai
 		Float64("total_amount", totalAmount).
 		Str("due_date", dueDate.Format("2006-01-02")).
 		Msg("Loan created successfully")
+
+	// Log business event
+	s.businessLogger.LoanCreated(ctx, loan.ID, input.CustomerID, input.LoanAmount, input.InterestRate)
 
 	return loan, nil
 }
@@ -429,6 +436,9 @@ func (s *LoanService) Renew(ctx context.Context, input RenewLoanInput) (*domain.
 	if err := s.loanRepo.Create(ctx, newLoan); err != nil {
 		return nil, fmt.Errorf("failed to create renewed loan: %w", err)
 	}
+
+	// Log business event
+	s.businessLogger.LoanRenewed(ctx, newLoan.ID, newLoan.DueDate.Format("2006-01-02"), 0)
 
 	return newLoan, nil
 }

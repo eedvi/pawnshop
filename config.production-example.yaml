@@ -1,0 +1,111 @@
+# Production Configuration Example
+# Following OWASP, GDPR, and Industry Best Practices
+
+app:
+  name: "Pawnshop"
+  environment: "production"
+  debug: false  # ❌ NUNCA true en producción
+  version: "1.0.0"
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: "30s"
+  write_timeout: "30s"
+  idle_timeout: "120s"
+
+database:
+  host: "${DB_HOST}"  # Use environment variables
+  port: 5432
+  user: "${DB_USER}"
+  password: "${DB_PASSWORD}"
+  dbname: "pawnshop_prod"
+  sslmode: "require"  # ✅ SIEMPRE SSL en producción
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime: "10m"
+
+redis:
+  host: "${REDIS_HOST}"
+  port: 6379
+  password: "${REDIS_PASSWORD}"
+  db: 0
+
+jwt:
+  secret: "${JWT_SECRET}"  # ✅ NUNCA hardcodear
+  access_token_ttl: "15m"
+  refresh_token_ttl: "7d"
+  issuer: "pawnshop-prod"
+
+storage:
+  type: "s3"
+  bucket: "pawnshop-prod"
+  endpoint: "${S3_ENDPOINT}"
+  access_key: "${S3_ACCESS_KEY}"
+  secret_key: "${S3_SECRET_KEY}"
+  region: "us-east-1"
+
+# 🔒 PRODUCTION LOGGING CONFIGURATION
+# Following OWASP, GDPR, and PCI DSS guidelines
+logging:
+  # Only log warnings and errors in production
+  level: "warn"
+
+  # JSON format for structured logging and SIEM integration
+  format: "json"
+
+  # Log queries slower than 500ms
+  slow_query_threshold: "500ms"
+
+  # ❌ NEVER log all queries in production
+  log_all_queries: false
+
+  # Request/Response logging
+  request_logging:
+    # ❌ NEVER log request/response bodies in production
+    log_request_body: false
+    log_response_body: false
+
+    # ✅ ALWAYS sanitize sensitive data
+    sanitize_sensitive: true
+
+    # Maximum body size to log (even when disabled, for safety)
+    max_body_size: 0
+
+    # Log headers (whitelist only, sanitized)
+    log_headers: false
+
+    # Log query params (sanitized)
+    log_query_params: false
+
+    # Sample rate for successful requests (10% = 0.1)
+    # Always log errors regardless of sample rate
+    sample_rate: 0.1
+    always_log_errors: true
+
+    # Paths to exclude from logging
+    exclude_paths:
+      - "/health"
+      - "/metrics"
+      - "/favicon.ico"
+
+  # Security settings
+  security:
+    # Anonymize IP addresses for GDPR compliance
+    anonymize_ips: true
+
+    # Hash session IDs instead of logging them directly
+    hash_session_ids: true
+
+    # Redact email addresses
+    redact_emails: true
+
+  # Retention policy (days)
+  retention_days: 30
+
+  # Log rotation
+  rotation:
+    max_size_mb: 100
+    max_backups: 10
+    max_age_days: 30
+    compress: true

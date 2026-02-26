@@ -29,6 +29,7 @@ vendor/
 .env.local
 .env.*.local
 config.local.yaml
+config.yaml
 
 # Logs
 *.log

@@ -1,7 +1,10 @@
+# Example: JSON logging format for production
+# Copy this to config.yaml and run: go run cmd/api/main.go
+
 app:
   name: "Pawnshop"
   environment: "development"
-  debug: true
+  debug: false  # Disable debug to use logging.level instead
   version: "1.0.0"
 
 server:
@@ -15,7 +18,7 @@ database:
   host: "localhost"
   port: 5432
   user: "postgres"
-  password: "admin"
+  password: "postgres"
   dbname: "pawnshop"
   sslmode: "disable"
   max_open_conns: 25
@@ -29,15 +32,18 @@ redis:
   db: 0
 
 jwt:
-  secret: "yqwkqCz7QRwRUuoFWkX4s4QOQND0xPhZR8qcddx0IvV"
+  secret: "your-super-secret-key-change-in-production"
   access_token_ttl: "15m"
   refresh_token_ttl: "168h"
   issuer: "pawnshop"
 
 storage:
   type: "local"
-  endpoint: ""
-  access_key: ""
-  secret_key: ""
   bucket: "pawnshop"
-  region: "us-east-1"
+
+# 🎯 JSON LOGGING FORMAT
+logging:
+  level: "info"       # debug, info, warn, error
+  format: "json"      # ← This will give you JSON output
+  slow_query_threshold: "1s"
+  log_all_queries: false

@@ -33,7 +33,7 @@ func main() {
 	}
 
 	// Setup logger
-	setupLogger(cfg.App.Debug)
+	setupLogger(cfg)
 
 	log.Info().
 		Str("app", cfg.App.Name).
@@ -195,6 +195,20 @@ func main() {
 	app.Use(recover.New())
 	app.Use(loggingMiddleware.Logger())
 	app.Use(loggingMiddleware.Recovery())
+
+	// Advanced request logging (optional, configured per environment)
+	if cfg.App.Debug {
+		// Development: Log request/response details (sanitized)
+		app.Use(middleware.RequestLoggingMiddleware(
+			middleware.DevelopmentRequestLoggingConfig(),
+		))
+	} else {
+		// Production: Only metadata, no bodies
+		app.Use(middleware.RequestLoggingMiddleware(
+			middleware.DefaultRequestLoggingConfig(),
+		))
+	}
+
 	app.Use(compress.New())
 	app.Use(middleware.SecurityHeaders())
 	app.Use(middleware.CORS(middleware.DefaultCORSConfig()))
@@ -307,14 +321,34 @@ func main() {
 	log.Info().Msg("Server stopped")
 }
 
-func setupLogger(debug bool) {
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+func setupLogger(cfg *config.Config) {
+	// Set time format
+	zerolog.TimeFieldFormat = time.RFC3339
 
-	if debug {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
+	// Set log level from config
+	level := zerolog.InfoLevel
+	switch cfg.Logging.Level {
+	case "debug":
+		level = zerolog.DebugLevel
+	case "info":
+		level = zerolog.InfoLevel
+	case "warn":
+		level = zerolog.WarnLevel
+	case "error":
+		level = zerolog.ErrorLevel
+	}
+	zerolog.SetGlobalLevel(level)
+
+	// Set format based on config
+	if cfg.Logging.Format == "json" {
+		// JSON format - structured logging for production
+		log.Logger = zerolog.New(os.Stdout).With().Timestamp().Logger()
 	} else {
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		// Console format - human readable for development
+		log.Logger = log.Output(zerolog.ConsoleWriter{
+			Out:        os.Stdout,
+			TimeFormat: time.RFC3339,
+		})
 	}
 }
 

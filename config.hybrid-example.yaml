@@ -1,0 +1,59 @@
+# Hybrid Configuration Example (BEST PRACTICE)
+# This file combines config.yaml (static config) with .env (secrets)
+
+# ✅ Static configuration (safe to commit to Git)
+app:
+  name: "Pawnshop"
+  environment: "${APP_ENV:development}"  # From .env, default: development
+  debug: "${APP_DEBUG:true}"             # From .env, default: true
+  version: "1.0.0"
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: "15s"
+  write_timeout: "15s"
+  idle_timeout: "60s"
+
+# 🔒 Database secrets from environment
+database:
+  host: "${DB_HOST}"              # From .env - REQUIRED
+  port: "${DB_PORT:5432}"         # From .env, default: 5432
+  user: "${DB_USER}"              # From .env - REQUIRED
+  password: "${DB_PASSWORD}"      # From .env - REQUIRED (NEVER in Git!)
+  dbname: "${DB_NAME}"            # From .env - REQUIRED
+  sslmode: "${DB_SSL_MODE:disable}"
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: "5m"
+
+# 🔒 Redis secrets from environment
+redis:
+  host: "${REDIS_HOST:localhost}"
+  port: "${REDIS_PORT:6379}"
+  password: "${REDIS_PASSWORD:}"  # From .env (empty default)
+  db: "${REDIS_DB:0}"
+
+# 🔒 JWT secrets from environment
+jwt:
+  secret: "${JWT_SECRET}"         # From .env - REQUIRED (NEVER in Git!)
+  access_token_ttl: "15m"
+  refresh_token_ttl: "168h"
+  issuer: "${JWT_ISSUER:pawnshop}"
+
+# 🔒 Storage secrets from environment
+storage:
+  type: "local"  # or "s3"
+  bucket: "${S3_BUCKET:pawnshop}"
+  # Uncomment for S3:
+  # endpoint: "${S3_ENDPOINT}"
+  # access_key: "${S3_ACCESS_KEY}"
+  # secret_key: "${S3_SECRET_KEY}"
+  # region: "${S3_REGION}"
+
+# ✅ Logging configuration (safe to commit)
+logging:
+  level: "info"
+  format: "console"
+  slow_query_threshold: "1s"
+  log_all_queries: false

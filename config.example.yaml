@@ -1,0 +1,53 @@
+# Example configuration file for Pawnshop application
+
+app:
+  name: "Pawnshop"
+  environment: "development"  # development, staging, production
+  debug: true
+  version: "1.0.0"
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: "15s"
+  write_timeout: "15s"
+  idle_timeout: "60s"
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "postgres"
+  password: "postgres"
+  dbname: "pawnshop"
+  sslmode: "disable"
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: "5m"
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+
+jwt:
+  secret: "your-super-secret-key-change-in-production"
+  access_token_ttl: "15m"
+  refresh_token_ttl: "168h"  # 7 days
+  issuer: "pawnshop"
+
+storage:
+  type: "local"  # local, s3, minio
+  bucket: "pawnshop"
+  # For S3/Minio:
+  # endpoint: "https://s3.amazonaws.com"
+  # access_key: "your-access-key"
+  # secret_key: "your-secret-key"
+  # region: "us-east-1"
+
+# Logging configuration
+logging:
+  level: "info"  # debug, info, warn, error
+  format: "console"  # json, console
+  slow_query_threshold: "1s"  # Log queries slower than this
+  log_all_queries: false  # Set to true to log all database queries (debug mode)

@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -14,6 +16,7 @@ type Config struct {
 	Redis    RedisConfig
 	JWT      JWTConfig
 	Storage  StorageConfig
+	Logging  LoggingConfig
 }
 
 type AppConfig struct {
@@ -66,16 +69,42 @@ type StorageConfig struct {
 	Region    string
 }
 
+type LoggingConfig struct {
+	Level              string        // debug, info, warn, error
+	Format             string        // json, console
+	SlowQueryThreshold time.Duration // threshold for slow query logging
+	LogAllQueries      bool          // log all database queries (debug mode)
+}
+
 func Load() (*Config, error) {
+	// Load .env file if exists (development)
+	// In production, use real environment variables
+	envFile := os.Getenv("ENV_FILE")
+	if envFile == "" {
+		envFile = ".env"
+	}
+
+	if err := godotenv.Load(envFile); err != nil {
+		// .env is optional, only warn if explicitly set
+		if envFile != ".env" {
+			return nil, fmt.Errorf("error loading env file %s: %w", envFile, err)
+		}
+		// .env not found is OK - will use config.yaml and env vars
+	}
+
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
 	viper.AddConfigPath("./config")
 	viper.AddConfigPath("/etc/pawnshop")
 
-	// Environment variables
+	// Environment variables override config file
 	viper.AutomaticEnv()
 	viper.SetEnvPrefix("PAWN")
+
+	// Map environment variables to config keys
+	// This allows both PAWN_DATABASE_HOST and DB_HOST to work
+	bindEnvVariables()
 
 	// Defaults
 	setDefaults()
@@ -145,6 +174,14 @@ func Load() (*Config, error) {
 		Region:    viper.GetString("storage.region"),
 	}
 
+	// Logging
+	config.Logging = LoggingConfig{
+		Level:              viper.GetString("logging.level"),
+		Format:             viper.GetString("logging.format"),
+		SlowQueryThreshold: viper.GetDuration("logging.slow_query_threshold"),
+		LogAllQueries:      viper.GetBool("logging.log_all_queries"),
+	}
+
 	return &config, nil
 }
 
@@ -188,6 +225,12 @@ func setDefaults() {
 	// Storage defaults
 	viper.SetDefault("storage.type", "local")
 	viper.SetDefault("storage.bucket", "pawnshop")
+
+	// Logging defaults
+	viper.SetDefault("logging.level", "info")
+	viper.SetDefault("logging.format", "console")
+	viper.SetDefault("logging.slow_query_threshold", "1s")
+	viper.SetDefault("logging.log_all_queries", false)
 }
 
 // DSN returns the PostgreSQL connection string
@@ -209,4 +252,37 @@ func (c *DatabaseConfig) URL() string {
 // RedisAddr returns the Redis address
 func (c *RedisConfig) Addr() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+}
+
+// bindEnvVariables maps common environment variable names to viper keys
+// This allows using standard names like DB_HOST instead of PAWN_DATABASE_HOST
+func bindEnvVariables() {
+	// Database
+	viper.BindEnv("database.host", "DB_HOST")
+	viper.BindEnv("database.port", "DB_PORT")
+	viper.BindEnv("database.user", "DB_USER")
+	viper.BindEnv("database.password", "DB_PASSWORD")
+	viper.BindEnv("database.dbname", "DB_NAME")
+	viper.BindEnv("database.sslmode", "DB_SSL_MODE")
+
+	// Redis
+	viper.BindEnv("redis.host", "REDIS_HOST")
+	viper.BindEnv("redis.port", "REDIS_PORT")
+	viper.BindEnv("redis.password", "REDIS_PASSWORD")
+	viper.BindEnv("redis.db", "REDIS_DB")
+
+	// JWT
+	viper.BindEnv("jwt.secret", "JWT_SECRET")
+	viper.BindEnv("jwt.issuer", "JWT_ISSUER")
+
+	// App
+	viper.BindEnv("app.environment", "APP_ENV")
+	viper.BindEnv("app.debug", "APP_DEBUG")
+
+	// Storage
+	viper.BindEnv("storage.endpoint", "S3_ENDPOINT")
+	viper.BindEnv("storage.access_key", "S3_ACCESS_KEY")
+	viper.BindEnv("storage.secret_key", "S3_SECRET_KEY")
+	viper.BindEnv("storage.bucket", "S3_BUCKET")
+	viper.BindEnv("storage.region", "S3_REGION")
 }
