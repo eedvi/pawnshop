@@ -97,18 +97,26 @@ func (s *JobService) ProcessOverdueLoans(ctx context.Context) error {
 			}
 
 			// Check if past grace period - automatic confiscation
+			// Add grace period days and set to end of day (23:59:59) to avoid timezone issues
 			gracePeriodEnd := loan.DueDate.AddDate(0, 0, loan.GracePeriodDays)
-			daysUntilConfiscation := int(gracePeriodEnd.Sub(now).Hours() / 24)
+			gracePeriodEndOfDay := time.Date(
+				gracePeriodEnd.Year(),
+				gracePeriodEnd.Month(),
+				gracePeriodEnd.Day(),
+				23, 59, 59, 0,
+				time.Local, // Use local timezone
+			)
+			daysUntilConfiscation := int(gracePeriodEndOfDay.Sub(now).Hours() / 24)
 
 			s.logger.Debug().
 				Int64("loan_id", loan.ID).
-				Time("grace_period_end", gracePeriodEnd).
+				Time("grace_period_end", gracePeriodEndOfDay).
 				Int("days_until_confiscation", daysUntilConfiscation).
-				Bool("past_grace_period", gracePeriodEnd.Before(now)).
+				Bool("past_grace_period", gracePeriodEndOfDay.Before(now)).
 				Str("current_status", string(loan.Status)).
 				Msg("Checking confiscation eligibility")
 
-			if gracePeriodEnd.Before(now) && loan.Status == domain.LoanStatusOverdue {
+			if gracePeriodEndOfDay.Before(now) && loan.Status == domain.LoanStatusOverdue {
 				// Update loan status to confiscated
 				if err := s.loanRepo.UpdateStatus(ctx, loan.ID, domain.LoanStatusConfiscated); err != nil {
 					s.logger.Error().Err(err).Int64("loan_id", loan.ID).Msg("Failed to confiscate loan")

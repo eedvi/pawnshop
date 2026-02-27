@@ -89,8 +89,29 @@ export default function LoanDetailPage() {
   const balance = loan.principal_remaining + loan.interest_remaining + loan.late_fee_amount
   const progressPercent = loan.total_amount > 0 ? (loan.amount_paid / loan.total_amount) * 100 : 0
   const canRenew = ['active', 'overdue'].includes(loan.status)
-  const canConfiscate = ['overdue', 'defaulted'].includes(loan.status)
   const canAcceptPayments = !['paid', 'confiscated'].includes(loan.status)
+
+  // Calculate grace period end and days until automatic confiscation
+  const calculateGracePeriodInfo = () => {
+    if (loan.status !== 'overdue') return { isOutsideGracePeriod: false, daysUntilConfiscation: 0 }
+
+    const dueDate = new Date(loan.due_date)
+    const gracePeriodEnd = new Date(dueDate)
+    gracePeriodEnd.setDate(gracePeriodEnd.getDate() + loan.grace_period_days)
+    // Set to end of day
+    gracePeriodEnd.setHours(23, 59, 59, 999)
+
+    const now = new Date()
+    const isOutsideGracePeriod = now > gracePeriodEnd
+    const diffTime = gracePeriodEnd.getTime() - now.getTime()
+    const daysUntilConfiscation = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)))
+
+    return { isOutsideGracePeriod, daysUntilConfiscation }
+  }
+
+  const gracePeriodInfo = calculateGracePeriodInfo()
+  // Only allow manual confiscation as backup if grace period has passed
+  const canConfiscate = loan.status === 'overdue' && gracePeriodInfo.isOutsideGracePeriod
 
   const colorMap: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
     green: 'default',
@@ -133,16 +154,39 @@ export default function LoanDetailPage() {
       />
 
       {/* Status Alert */}
-      {loan.days_overdue > 0 && (
+      {loan.status === 'overdue' && (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
           <div className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-5 w-5" />
             <span className="font-medium">
-              Préstamo vencido hace {loan.days_overdue} días
+              Préstamo vencido
             </span>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Mora acumulada: {formatCurrency(loan.late_fee_amount)}
+          </p>
+          {gracePeriodInfo.daysUntilConfiscation > 0 ? (
+            <p className="mt-2 text-sm text-amber-600 dark:text-amber-500">
+              <Clock className="inline h-4 w-4 mr-1" />
+              Confiscación automática en {gracePeriodInfo.daysUntilConfiscation} día(s)
+            </p>
+          ) : gracePeriodInfo.isOutsideGracePeriod && loan.status === 'overdue' ? (
+            <p className="mt-2 text-sm text-destructive">
+              <AlertTriangle className="inline h-4 w-4 mr-1" />
+              Periodo de gracia terminado - Elegible para confiscación
+            </p>
+          ) : null}
+        </div>
+      )}
+
+      {loan.status === 'confiscated' && (
+        <div className="rounded-lg border border-muted bg-muted/50 p-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            <span className="font-medium">Préstamo confiscado</span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            El artículo ha sido confiscado y está disponible para venta
           </p>
         </div>
       )}
