@@ -46,49 +46,53 @@ export function useOverdueReport(filters?: ReportFilters) {
   })
 }
 
+// Report export mutations - apiDownload handles the download automatically
 export function useExportLoanReport() {
   return useMutation({
     mutationFn: (filters?: ReportFilters) => reportService.exportLoanReport(filters),
-    onSuccess: (blob) => {
-      downloadBlob(blob, 'reporte-prestamos.pdf')
-    },
   })
 }
 
 export function useExportPaymentReport() {
   return useMutation({
     mutationFn: (filters?: ReportFilters) => reportService.exportPaymentReport(filters),
-    onSuccess: (blob) => {
-      downloadBlob(blob, 'reporte-pagos.pdf')
-    },
   })
 }
 
 export function useExportSalesReport() {
   return useMutation({
     mutationFn: (filters?: ReportFilters) => reportService.exportSalesReport(filters),
-    onSuccess: (blob) => {
-      downloadBlob(blob, 'reporte-ventas.pdf')
-    },
   })
 }
 
 export function useExportOverdueReport() {
   return useMutation({
     mutationFn: (filters?: ReportFilters) => reportService.exportOverdueReport(filters),
-    onSuccess: (blob) => {
-      downloadBlob(blob, 'reporte-vencidos.pdf')
-    },
   })
 }
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = window.URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  window.URL.revokeObjectURL(url)
+// Individual document export mutations
+export function useExportLoanContract() {
+  return useMutation({
+    mutationFn: (loanId: number) => reportService.exportLoanContract(loanId),
+  })
+}
+
+export function useExportPaymentReceipt() {
+  return useMutation({
+    mutationFn: (paymentId: number) => reportService.exportPaymentReceipt(paymentId),
+  })
+}
+
+export function useExportSaleReceipt() {
+  return useMutation({
+    mutationFn: (saleId: number) => reportService.exportSaleReceipt(saleId),
+  })
+}
+
+export function useExportDailyReport() {
+  return useMutation({
+    mutationFn: (params?: { date?: string; branchId?: number }) =>
+      reportService.exportDailyReport(params?.date, params?.branchId),
+  })
 }

@@ -9,6 +9,7 @@ import {
   User,
   Package,
   AlertTriangle,
+  Download,
 } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/page-header'
@@ -18,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { ROUTES, itemRoute, customerRoute } from '@/routes/routes'
 import { useSale, useRefundSale, useCancelSale } from '@/hooks/use-sales'
+import { useExportSaleReceipt } from '@/hooks/use-reports'
 import { SALE_STATUSES, SALE_TYPES, PAYMENT_METHODS } from '@/types'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format'
 import { RefundSaleDialog } from './refund-sale-dialog'
@@ -33,6 +35,7 @@ export default function SaleDetailPage() {
   const { data: sale, isLoading, error } = useSale(saleId)
   const refundMutation = useRefundSale()
   const cancelMutation = useCancelSale()
+  const exportReceiptMutation = useExportSaleReceipt()
 
   const handleRefundConfirm = (amount: number | undefined, reason: string) => {
     refundMutation.mutate(
@@ -98,6 +101,18 @@ export default function SaleDetailPage() {
         backUrl={ROUTES.SALES}
         actions={
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => exportReceiptMutation.mutate(saleId)}
+              disabled={exportReceiptMutation.isPending}
+            >
+              {exportReceiptMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              Recibo
+            </Button>
             {canCancel && (
               <Button variant="outline" onClick={() => setCancelDialogOpen(true)}>
                 <XCircle className="mr-2 h-4 w-4" />

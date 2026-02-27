@@ -157,6 +157,68 @@ func (h *ReportHandler) ExportSaleReceipt(c *fiber.Ctx) error {
 	return c.Send(pdfData)
 }
 
+// ExportLoanReportPDF exports loan report as PDF
+func (h *ReportHandler) ExportLoanReportPDF(c *fiber.Ctx) error {
+	branchID := c.QueryInt("branch_id", 0)
+	dateFrom := c.Query("date_from", time.Now().AddDate(0, -1, 0).Format("2006-01-02"))
+	dateTo := c.Query("date_to", time.Now().Format("2006-01-02"))
+
+	pdfData, err := h.reportService.ExportLoanReportPDF(c.Context(), int64(branchID), dateFrom, dateTo)
+	if err != nil {
+		return response.InternalError(c, "Failed to generate loan report PDF")
+	}
+
+	c.Set("Content-Type", "application/pdf")
+	c.Set("Content-Disposition", "attachment; filename=reporte_prestamos_"+dateFrom+"_"+dateTo+".pdf")
+	return c.Send(pdfData)
+}
+
+// ExportPaymentReportPDF exports payment report as PDF
+func (h *ReportHandler) ExportPaymentReportPDF(c *fiber.Ctx) error {
+	branchID := c.QueryInt("branch_id", 0)
+	dateFrom := c.Query("date_from", time.Now().AddDate(0, -1, 0).Format("2006-01-02"))
+	dateTo := c.Query("date_to", time.Now().Format("2006-01-02"))
+
+	pdfData, err := h.reportService.ExportPaymentReportPDF(c.Context(), int64(branchID), dateFrom, dateTo)
+	if err != nil {
+		return response.InternalError(c, "Failed to generate payment report PDF")
+	}
+
+	c.Set("Content-Type", "application/pdf")
+	c.Set("Content-Disposition", "attachment; filename=reporte_pagos_"+dateFrom+"_"+dateTo+".pdf")
+	return c.Send(pdfData)
+}
+
+// ExportSalesReportPDF exports sales report as PDF
+func (h *ReportHandler) ExportSalesReportPDF(c *fiber.Ctx) error {
+	branchID := c.QueryInt("branch_id", 0)
+	dateFrom := c.Query("date_from", time.Now().AddDate(0, -1, 0).Format("2006-01-02"))
+	dateTo := c.Query("date_to", time.Now().Format("2006-01-02"))
+
+	pdfData, err := h.reportService.ExportSalesReportPDF(c.Context(), int64(branchID), dateFrom, dateTo)
+	if err != nil {
+		return response.InternalError(c, "Failed to generate sales report PDF")
+	}
+
+	c.Set("Content-Type", "application/pdf")
+	c.Set("Content-Disposition", "attachment; filename=reporte_ventas_"+dateFrom+"_"+dateTo+".pdf")
+	return c.Send(pdfData)
+}
+
+// ExportOverdueReportPDF exports overdue report as PDF
+func (h *ReportHandler) ExportOverdueReportPDF(c *fiber.Ctx) error {
+	branchID := c.QueryInt("branch_id", 0)
+
+	pdfData, err := h.reportService.ExportOverdueReportPDF(c.Context(), int64(branchID))
+	if err != nil {
+		return response.InternalError(c, "Failed to generate overdue report PDF")
+	}
+
+	c.Set("Content-Type", "application/pdf")
+	c.Set("Content-Disposition", "attachment; filename=reporte_vencidos_"+time.Now().Format("2006-01-02")+".pdf")
+	return c.Send(pdfData)
+}
+
 // RegisterRoutes registers report routes
 func (h *ReportHandler) RegisterRoutes(app fiber.Router, authMiddleware *middleware.AuthMiddleware) {
 	reports := app.Group("/reports")
@@ -165,13 +227,19 @@ func (h *ReportHandler) RegisterRoutes(app fiber.Router, authMiddleware *middlew
 	// Dashboard
 	reports.Get("/dashboard", authMiddleware.RequirePermission("reports.read"), h.GetDashboard)
 
-	// Reports
+	// Reports (JSON)
 	reports.Get("/loans", authMiddleware.RequirePermission("reports.read"), h.GetLoanReport)
 	reports.Get("/payments", authMiddleware.RequirePermission("reports.read"), h.GetPaymentReport)
 	reports.Get("/sales", authMiddleware.RequirePermission("reports.read"), h.GetSalesReport)
 	reports.Get("/overdue", authMiddleware.RequirePermission("reports.read"), h.GetOverdueReport)
 
-	// PDF exports
+	// Report exports (PDF)
+	reports.Get("/loans/export", authMiddleware.RequirePermission("reports.export"), h.ExportLoanReportPDF)
+	reports.Get("/payments/export", authMiddleware.RequirePermission("reports.export"), h.ExportPaymentReportPDF)
+	reports.Get("/sales/export", authMiddleware.RequirePermission("reports.export"), h.ExportSalesReportPDF)
+	reports.Get("/overdue/export", authMiddleware.RequirePermission("reports.export"), h.ExportOverdueReportPDF)
+
+	// Individual document exports (PDF)
 	reports.Get("/export/daily", authMiddleware.RequirePermission("reports.export"), h.ExportDailyReport)
 	reports.Get("/export/loan/:id/contract", authMiddleware.RequirePermission("reports.export"), h.ExportLoanContract)
 	reports.Get("/export/payment/:id/receipt", authMiddleware.RequirePermission("reports.export"), h.ExportPaymentReceipt)

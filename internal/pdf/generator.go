@@ -442,3 +442,596 @@ func SaveToBuffer(data []byte) (*bytes.Buffer, error) {
 	buf := bytes.NewBuffer(data)
 	return buf, nil
 }
+
+// LoanReportData contains loan report data for PDF generation
+type LoanReportData struct {
+	DateFrom         string
+	DateTo           string
+	TotalLoans       int
+	TotalAmount      float64
+	TotalInterest    float64
+	TotalOutstanding float64
+	ByStatus         map[string]int
+	ByStatusAmount   map[string]float64
+	Loans            []LoanReportItem
+}
+
+// LoanReportItem represents a loan in the report
+type LoanReportItem struct {
+	LoanNumber   string
+	CustomerName string
+	ItemName     string
+	Amount       float64
+	Interest     float64
+	Total        float64
+	Status       string
+	DueDate      string
+}
+
+// GenerateLoanReportPDF generates a loan report PDF
+func (g *Generator) GenerateLoanReportPDF(data *LoanReportData) ([]byte, error) {
+	cfg := config.NewBuilder().
+		WithPageNumber().
+		WithLeftMargin(10).
+		WithTopMargin(15).
+		WithRightMargin(10).
+		Build()
+
+	m := maroto.New(cfg)
+
+	// Header
+	g.addHeader(m, "REPORTE DE PRÉSTAMOS")
+
+	// Date range
+	m.AddRow(6, text.NewCol(12, fmt.Sprintf("Período: %s - %s", data.DateFrom, data.DateTo), props.Text{
+		Size:  10,
+		Align: align.Center,
+	}))
+
+	m.AddRow(10)
+
+	// Summary
+	m.AddRow(8, text.NewCol(12, "RESUMEN", props.Text{
+		Size:  11,
+		Style: fontstyle.Bold,
+	}))
+
+	m.AddRows(
+		row.New(6).Add(
+			col.New(6).Add(text.New("Total de Préstamos:", props.Text{Size: 10})),
+			col.New(6).Add(text.New(fmt.Sprintf("%d", data.TotalLoans), props.Text{Size: 10, Align: align.Right})),
+		),
+		row.New(6).Add(
+			col.New(6).Add(text.New("Monto Total Prestado:", props.Text{Size: 10})),
+			col.New(6).Add(text.New(fmt.Sprintf("Q%.2f", data.TotalAmount), props.Text{Size: 10, Align: align.Right})),
+		),
+		row.New(6).Add(
+			col.New(6).Add(text.New("Intereses Totales:", props.Text{Size: 10})),
+			col.New(6).Add(text.New(fmt.Sprintf("Q%.2f", data.TotalInterest), props.Text{Size: 10, Align: align.Right})),
+		),
+		row.New(6).Add(
+			col.New(6).Add(text.New("Saldo Pendiente:", props.Text{Size: 10, Style: fontstyle.Bold})),
+			col.New(6).Add(text.New(fmt.Sprintf("Q%.2f", data.TotalOutstanding), props.Text{Size: 10, Style: fontstyle.Bold, Align: align.Right})),
+		),
+	)
+
+	// By status
+	m.AddRow(10)
+	m.AddRow(8, text.NewCol(12, "POR ESTADO", props.Text{
+		Size:  11,
+		Style: fontstyle.Bold,
+	}))
+
+	statusLabels := map[string]string{
+		"active":      "Activos",
+		"paid":        "Pagados",
+		"overdue":     "Vencidos",
+		"defaulted":   "En Mora",
+		"renewed":     "Renovados",
+		"confiscated": "Confiscados",
+	}
+
+	for status, count := range data.ByStatus {
+		label := statusLabels[status]
+		if label == "" {
+			label = status
+		}
+		amount := data.ByStatusAmount[status]
+		m.AddRow(5,
+			text.NewCol(4, label, props.Text{Size: 9}),
+			text.NewCol(4, fmt.Sprintf("%d", count), props.Text{Size: 9, Align: align.Center}),
+			text.NewCol(4, fmt.Sprintf("Q%.2f", amount), props.Text{Size: 9, Align: align.Right}),
+		)
+	}
+
+	// Loan list
+	if len(data.Loans) > 0 {
+		m.AddRow(10)
+		m.AddRow(8, text.NewCol(12, "DETALLE DE PRÉSTAMOS", props.Text{
+			Size:  11,
+			Style: fontstyle.Bold,
+		}))
+
+		// Table header
+		m.AddRow(6,
+			text.NewCol(2, "No.", props.Text{Size: 8, Style: fontstyle.Bold}),
+			text.NewCol(3, "Cliente", props.Text{Size: 8, Style: fontstyle.Bold}),
+			text.NewCol(2, "Monto", props.Text{Size: 8, Style: fontstyle.Bold, Align: align.Right}),
+			text.NewCol(2, "Total", props.Text{Size: 8, Style: fontstyle.Bold, Align: align.Right}),
+			text.NewCol(2, "Estado", props.Text{Size: 8, Style: fontstyle.Bold, Align: align.Center}),
+			text.NewCol(1, "Vence", props.Text{Size: 8, Style: fontstyle.Bold}),
+		)
+
+		for _, loan := range data.Loans {
+			statusLabel := statusLabels[loan.Status]
+			if statusLabel == "" {
+				statusLabel = loan.Status
+			}
+			m.AddRow(5,
+				text.NewCol(2, loan.LoanNumber, props.Text{Size: 7}),
+				text.NewCol(3, truncateName(loan.CustomerName, 20), props.Text{Size: 7}),
+				text.NewCol(2, fmt.Sprintf("Q%.2f", loan.Amount), props.Text{Size: 7, Align: align.Right}),
+				text.NewCol(2, fmt.Sprintf("Q%.2f", loan.Total), props.Text{Size: 7, Align: align.Right}),
+				text.NewCol(2, statusLabel, props.Text{Size: 7, Align: align.Center}),
+				text.NewCol(1, loan.DueDate, props.Text{Size: 7}),
+			)
+		}
+	}
+
+	// Footer
+	m.AddRow(15)
+	m.AddRow(5, text.NewCol(12, fmt.Sprintf("Generado: %s", time.Now().Format("02/01/2006 15:04:05")), props.Text{
+		Size:  8,
+		Align: align.Right,
+	}))
+
+	document, err := m.Generate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate PDF: %w", err)
+	}
+
+	return document.GetBytes(), nil
+}
+
+// PaymentReportData contains payment report data for PDF generation
+type PaymentReportData struct {
+	DateFrom       string
+	DateTo         string
+	TotalPayments  int
+	TotalAmount    float64
+	TotalPrincipal float64
+	TotalInterest  float64
+	TotalLateFees  float64
+	ByMethod       map[string]int
+	ByMethodAmount map[string]float64
+	Payments       []PaymentReportItem
+}
+
+// PaymentReportItem represents a payment in the report
+type PaymentReportItem struct {
+	PaymentNumber string
+	CustomerName  string
+	LoanNumber    string
+	Amount        float64
+	Principal     float64
+	Interest      float64
+	LateFee       float64
+	Method        string
+	Date          string
+}
+
+// GeneratePaymentReportPDF generates a payment report PDF
+func (g *Generator) GeneratePaymentReportPDF(data *PaymentReportData) ([]byte, error) {
+	cfg := config.NewBuilder().
+		WithPageNumber().
+		WithLeftMargin(10).
+		WithTopMargin(15).
+		WithRightMargin(10).
+		Build()
+
+	m := maroto.New(cfg)
+
+	// Header
+	g.addHeader(m, "REPORTE DE PAGOS")
+
+	// Date range
+	m.AddRow(6, text.NewCol(12, fmt.Sprintf("Período: %s - %s", data.DateFrom, data.DateTo), props.Text{
+		Size:  10,
+		Align: align.Center,
+	}))
+
+	m.AddRow(10)
+
+	// Summary
+	m.AddRow(8, text.NewCol(12, "RESUMEN", props.Text{
+		Size:  11,
+		Style: fontstyle.Bold,
+	}))
+
+	m.AddRows(
+		row.New(6).Add(
+			col.New(6).Add(text.New("Total de Pagos:", props.Text{Size: 10})),
+			col.New(6).Add(text.New(fmt.Sprintf("%d", data.TotalPayments), props.Text{Size: 10, Align: align.Right})),
+		),
+		row.New(6).Add(
+			col.New(6).Add(text.New("Monto Total:", props.Text{Size: 10, Style: fontstyle.Bold})),
+			col.New(6).Add(text.New(fmt.Sprintf("Q%.2f", data.TotalAmount), props.Text{Size: 10, Style: fontstyle.Bold, Align: align.Right})),
+		),
+		row.New(6).Add(
+			col.New(6).Add(text.New("Capital Recuperado:", props.Text{Size: 10})),
+			col.New(6).Add(text.New(fmt.Sprintf("Q%.2f", data.TotalPrincipal), props.Text{Size: 10, Align: align.Right})),
+		),
+		row.New(6).Add(
+			col.New(6).Add(text.New("Intereses Cobrados:", props.Text{Size: 10})),
+			col.New(6).Add(text.New(fmt.Sprintf("Q%.2f", data.TotalInterest), props.Text{Size: 10, Align: align.Right})),
+		),
+		row.New(6).Add(
+			col.New(6).Add(text.New("Moras Cobradas:", props.Text{Size: 10})),
+			col.New(6).Add(text.New(fmt.Sprintf("Q%.2f", data.TotalLateFees), props.Text{Size: 10, Align: align.Right})),
+		),
+	)
+
+	// By method
+	m.AddRow(10)
+	m.AddRow(8, text.NewCol(12, "POR MÉTODO DE PAGO", props.Text{
+		Size:  11,
+		Style: fontstyle.Bold,
+	}))
+
+	methodLabels := map[string]string{
+		"cash":     "Efectivo",
+		"card":     "Tarjeta",
+		"transfer": "Transferencia",
+	}
+
+	for method, count := range data.ByMethod {
+		label := methodLabels[method]
+		if label == "" {
+			label = method
+		}
+		amount := data.ByMethodAmount[method]
+		m.AddRow(5,
+			text.NewCol(4, label, props.Text{Size: 9}),
+			text.NewCol(4, fmt.Sprintf("%d", count), props.Text{Size: 9, Align: align.Center}),
+			text.NewCol(4, fmt.Sprintf("Q%.2f", amount), props.Text{Size: 9, Align: align.Right}),
+		)
+	}
+
+	// Payment list
+	if len(data.Payments) > 0 {
+		m.AddRow(10)
+		m.AddRow(8, text.NewCol(12, "DETALLE DE PAGOS", props.Text{
+			Size:  11,
+			Style: fontstyle.Bold,
+		}))
+
+		// Table header
+		m.AddRow(6,
+			text.NewCol(2, "Recibo", props.Text{Size: 8, Style: fontstyle.Bold}),
+			text.NewCol(3, "Cliente", props.Text{Size: 8, Style: fontstyle.Bold}),
+			text.NewCol(2, "Préstamo", props.Text{Size: 8, Style: fontstyle.Bold}),
+			text.NewCol(2, "Monto", props.Text{Size: 8, Style: fontstyle.Bold, Align: align.Right}),
+			text.NewCol(2, "Método", props.Text{Size: 8, Style: fontstyle.Bold, Align: align.Center}),
+			text.NewCol(1, "Fecha", props.Text{Size: 8, Style: fontstyle.Bold}),
+		)
+
+		for _, payment := range data.Payments {
+			methodLabel := methodLabels[payment.Method]
+			if methodLabel == "" {
+				methodLabel = payment.Method
+			}
+			m.AddRow(5,
+				text.NewCol(2, payment.PaymentNumber, props.Text{Size: 7}),
+				text.NewCol(3, truncateName(payment.CustomerName, 20), props.Text{Size: 7}),
+				text.NewCol(2, payment.LoanNumber, props.Text{Size: 7}),
+				text.NewCol(2, fmt.Sprintf("Q%.2f", payment.Amount), props.Text{Size: 7, Align: align.Right}),
+				text.NewCol(2, methodLabel, props.Text{Size: 7, Align: align.Center}),
+				text.NewCol(1, payment.Date, props.Text{Size: 7}),
+			)
+		}
+	}
+
+	// Footer
+	m.AddRow(15)
+	m.AddRow(5, text.NewCol(12, fmt.Sprintf("Generado: %s", time.Now().Format("02/01/2006 15:04:05")), props.Text{
+		Size:  8,
+		Align: align.Right,
+	}))
+
+	document, err := m.Generate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate PDF: %w", err)
+	}
+
+	return document.GetBytes(), nil
+}
+
+// SalesReportData contains sales report data for PDF generation
+type SalesReportData struct {
+	DateFrom       string
+	DateTo         string
+	TotalSales     int
+	TotalAmount    float64
+	TotalDiscounts float64
+	NetAmount      float64
+	ByMethod       map[string]int
+	ByMethodAmount map[string]float64
+	Sales          []SaleReportItem
+}
+
+// SaleReportItem represents a sale in the report
+type SaleReportItem struct {
+	SaleNumber   string
+	CustomerName string
+	ItemName     string
+	Price        float64
+	Discount     float64
+	Total        float64
+	Method       string
+	Date         string
+}
+
+// GenerateSalesReportPDF generates a sales report PDF
+func (g *Generator) GenerateSalesReportPDF(data *SalesReportData) ([]byte, error) {
+	cfg := config.NewBuilder().
+		WithPageNumber().
+		WithLeftMargin(10).
+		WithTopMargin(15).
+		WithRightMargin(10).
+		Build()
+
+	m := maroto.New(cfg)
+
+	// Header
+	g.addHeader(m, "REPORTE DE VENTAS")
+
+	// Date range
+	m.AddRow(6, text.NewCol(12, fmt.Sprintf("Período: %s - %s", data.DateFrom, data.DateTo), props.Text{
+		Size:  10,
+		Align: align.Center,
+	}))
+
+	m.AddRow(10)
+
+	// Summary
+	m.AddRow(8, text.NewCol(12, "RESUMEN", props.Text{
+		Size:  11,
+		Style: fontstyle.Bold,
+	}))
+
+	m.AddRows(
+		row.New(6).Add(
+			col.New(6).Add(text.New("Total de Ventas:", props.Text{Size: 10})),
+			col.New(6).Add(text.New(fmt.Sprintf("%d", data.TotalSales), props.Text{Size: 10, Align: align.Right})),
+		),
+		row.New(6).Add(
+			col.New(6).Add(text.New("Monto Bruto:", props.Text{Size: 10})),
+			col.New(6).Add(text.New(fmt.Sprintf("Q%.2f", data.TotalAmount), props.Text{Size: 10, Align: align.Right})),
+		),
+		row.New(6).Add(
+			col.New(6).Add(text.New("Descuentos:", props.Text{Size: 10})),
+			col.New(6).Add(text.New(fmt.Sprintf("-Q%.2f", data.TotalDiscounts), props.Text{Size: 10, Align: align.Right})),
+		),
+		row.New(6).Add(
+			col.New(6).Add(text.New("Monto Neto:", props.Text{Size: 10, Style: fontstyle.Bold})),
+			col.New(6).Add(text.New(fmt.Sprintf("Q%.2f", data.NetAmount), props.Text{Size: 10, Style: fontstyle.Bold, Align: align.Right})),
+		),
+	)
+
+	// By method
+	m.AddRow(10)
+	m.AddRow(8, text.NewCol(12, "POR MÉTODO DE PAGO", props.Text{
+		Size:  11,
+		Style: fontstyle.Bold,
+	}))
+
+	methodLabels := map[string]string{
+		"cash":     "Efectivo",
+		"card":     "Tarjeta",
+		"transfer": "Transferencia",
+	}
+
+	for method, count := range data.ByMethod {
+		label := methodLabels[method]
+		if label == "" {
+			label = method
+		}
+		amount := data.ByMethodAmount[method]
+		m.AddRow(5,
+			text.NewCol(4, label, props.Text{Size: 9}),
+			text.NewCol(4, fmt.Sprintf("%d", count), props.Text{Size: 9, Align: align.Center}),
+			text.NewCol(4, fmt.Sprintf("Q%.2f", amount), props.Text{Size: 9, Align: align.Right}),
+		)
+	}
+
+	// Sales list
+	if len(data.Sales) > 0 {
+		m.AddRow(10)
+		m.AddRow(8, text.NewCol(12, "DETALLE DE VENTAS", props.Text{
+			Size:  11,
+			Style: fontstyle.Bold,
+		}))
+
+		// Table header
+		m.AddRow(6,
+			text.NewCol(2, "No.", props.Text{Size: 8, Style: fontstyle.Bold}),
+			text.NewCol(3, "Artículo", props.Text{Size: 8, Style: fontstyle.Bold}),
+			text.NewCol(2, "Precio", props.Text{Size: 8, Style: fontstyle.Bold, Align: align.Right}),
+			text.NewCol(2, "Total", props.Text{Size: 8, Style: fontstyle.Bold, Align: align.Right}),
+			text.NewCol(2, "Método", props.Text{Size: 8, Style: fontstyle.Bold, Align: align.Center}),
+			text.NewCol(1, "Fecha", props.Text{Size: 8, Style: fontstyle.Bold}),
+		)
+
+		for _, sale := range data.Sales {
+			methodLabel := methodLabels[sale.Method]
+			if methodLabel == "" {
+				methodLabel = sale.Method
+			}
+			m.AddRow(5,
+				text.NewCol(2, sale.SaleNumber, props.Text{Size: 7}),
+				text.NewCol(3, truncateName(sale.ItemName, 20), props.Text{Size: 7}),
+				text.NewCol(2, fmt.Sprintf("Q%.2f", sale.Price), props.Text{Size: 7, Align: align.Right}),
+				text.NewCol(2, fmt.Sprintf("Q%.2f", sale.Total), props.Text{Size: 7, Align: align.Right}),
+				text.NewCol(2, methodLabel, props.Text{Size: 7, Align: align.Center}),
+				text.NewCol(1, sale.Date, props.Text{Size: 7}),
+			)
+		}
+	}
+
+	// Footer
+	m.AddRow(15)
+	m.AddRow(5, text.NewCol(12, fmt.Sprintf("Generado: %s", time.Now().Format("02/01/2006 15:04:05")), props.Text{
+		Size:  8,
+		Align: align.Right,
+	}))
+
+	document, err := m.Generate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate PDF: %w", err)
+	}
+
+	return document.GetBytes(), nil
+}
+
+// OverdueReportData contains overdue report data for PDF generation
+type OverdueReportData struct {
+	GeneratedAt    string
+	TotalOverdue   int
+	TotalAmount    float64
+	TotalLateFees  float64
+	OverdueLoans   []OverdueReportItem
+	ApproachingDue []OverdueReportItem
+}
+
+// OverdueReportItem represents an overdue loan in the report
+type OverdueReportItem struct {
+	LoanNumber   string
+	CustomerName string
+	ItemName     string
+	Amount       float64
+	LateFee      float64
+	DaysOverdue  int
+	DueDate      string
+	GraceEnds    string
+}
+
+// GenerateOverdueReportPDF generates an overdue loans report PDF
+func (g *Generator) GenerateOverdueReportPDF(data *OverdueReportData) ([]byte, error) {
+	cfg := config.NewBuilder().
+		WithPageNumber().
+		WithLeftMargin(10).
+		WithTopMargin(15).
+		WithRightMargin(10).
+		Build()
+
+	m := maroto.New(cfg)
+
+	// Header
+	g.addHeader(m, "REPORTE DE PRÉSTAMOS VENCIDOS")
+
+	m.AddRow(6, text.NewCol(12, fmt.Sprintf("Generado: %s", data.GeneratedAt), props.Text{
+		Size:  10,
+		Align: align.Center,
+	}))
+
+	m.AddRow(10)
+
+	// Summary
+	m.AddRow(8, text.NewCol(12, "RESUMEN", props.Text{
+		Size:  11,
+		Style: fontstyle.Bold,
+	}))
+
+	m.AddRows(
+		row.New(6).Add(
+			col.New(6).Add(text.New("Total Préstamos Vencidos:", props.Text{Size: 10})),
+			col.New(6).Add(text.New(fmt.Sprintf("%d", data.TotalOverdue), props.Text{Size: 10, Align: align.Right})),
+		),
+		row.New(6).Add(
+			col.New(6).Add(text.New("Monto Pendiente:", props.Text{Size: 10, Style: fontstyle.Bold})),
+			col.New(6).Add(text.New(fmt.Sprintf("Q%.2f", data.TotalAmount), props.Text{Size: 10, Style: fontstyle.Bold, Align: align.Right})),
+		),
+		row.New(6).Add(
+			col.New(6).Add(text.New("Moras Acumuladas:", props.Text{Size: 10})),
+			col.New(6).Add(text.New(fmt.Sprintf("Q%.2f", data.TotalLateFees), props.Text{Size: 10, Align: align.Right})),
+		),
+	)
+
+	// Overdue loans list
+	if len(data.OverdueLoans) > 0 {
+		m.AddRow(10)
+		m.AddRow(8, text.NewCol(12, "PRÉSTAMOS VENCIDOS", props.Text{
+			Size:  11,
+			Style: fontstyle.Bold,
+		}))
+
+		// Table header
+		m.AddRow(6,
+			text.NewCol(2, "No.", props.Text{Size: 8, Style: fontstyle.Bold}),
+			text.NewCol(3, "Cliente", props.Text{Size: 8, Style: fontstyle.Bold}),
+			text.NewCol(2, "Saldo", props.Text{Size: 8, Style: fontstyle.Bold, Align: align.Right}),
+			text.NewCol(2, "Mora", props.Text{Size: 8, Style: fontstyle.Bold, Align: align.Right}),
+			text.NewCol(1, "Días", props.Text{Size: 8, Style: fontstyle.Bold, Align: align.Center}),
+			text.NewCol(2, "Gracia", props.Text{Size: 8, Style: fontstyle.Bold}),
+		)
+
+		for _, loan := range data.OverdueLoans {
+			m.AddRow(5,
+				text.NewCol(2, loan.LoanNumber, props.Text{Size: 7}),
+				text.NewCol(3, truncateName(loan.CustomerName, 20), props.Text{Size: 7}),
+				text.NewCol(2, fmt.Sprintf("Q%.2f", loan.Amount), props.Text{Size: 7, Align: align.Right}),
+				text.NewCol(2, fmt.Sprintf("Q%.2f", loan.LateFee), props.Text{Size: 7, Align: align.Right}),
+				text.NewCol(1, fmt.Sprintf("%d", loan.DaysOverdue), props.Text{Size: 7, Align: align.Center}),
+				text.NewCol(2, loan.GraceEnds, props.Text{Size: 7}),
+			)
+		}
+	}
+
+	// Approaching due
+	if len(data.ApproachingDue) > 0 {
+		m.AddRow(10)
+		m.AddRow(8, text.NewCol(12, "PRÓXIMOS A VENCER (7 días)", props.Text{
+			Size:  11,
+			Style: fontstyle.Bold,
+		}))
+
+		// Table header
+		m.AddRow(6,
+			text.NewCol(2, "No.", props.Text{Size: 8, Style: fontstyle.Bold}),
+			text.NewCol(4, "Cliente", props.Text{Size: 8, Style: fontstyle.Bold}),
+			text.NewCol(3, "Saldo", props.Text{Size: 8, Style: fontstyle.Bold, Align: align.Right}),
+			text.NewCol(3, "Vence", props.Text{Size: 8, Style: fontstyle.Bold}),
+		)
+
+		for _, loan := range data.ApproachingDue {
+			m.AddRow(5,
+				text.NewCol(2, loan.LoanNumber, props.Text{Size: 7}),
+				text.NewCol(4, truncateName(loan.CustomerName, 25), props.Text{Size: 7}),
+				text.NewCol(3, fmt.Sprintf("Q%.2f", loan.Amount), props.Text{Size: 7, Align: align.Right}),
+				text.NewCol(3, loan.DueDate, props.Text{Size: 7}),
+			)
+		}
+	}
+
+	// Footer
+	m.AddRow(15)
+	m.AddRow(5, text.NewCol(12, fmt.Sprintf("Generado: %s", time.Now().Format("02/01/2006 15:04:05")), props.Text{
+		Size:  8,
+		Align: align.Right,
+	}))
+
+	document, err := m.Generate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate PDF: %w", err)
+	}
+
+	return document.GetBytes(), nil
+}
+
+// Helper function to truncate names
+func truncateName(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
