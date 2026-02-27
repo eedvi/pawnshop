@@ -215,12 +215,16 @@ func (s *JobService) CalculateLateFeesJob(ctx context.Context) error {
 			Int("days_overdue", daysOverdue).
 			Float64("calculated_late_fee", lateFee).
 			Float64("current_late_fee", loan.LateFeeAmount).
+			Float64("current_late_fee_remaining", loan.LateFeeRemaining).
 			Float64("difference", lateFee-loan.LateFeeAmount).
 			Msg("Late fee calculation")
 
 		// Update loan if late fee changed significantly
 		if lateFee > loan.LateFeeAmount+0.01 {
-			loan.LateFeeAmount = lateFee
+			// Calculate the increment to add to both fields
+			increment := lateFee - loan.LateFeeAmount
+			loan.LateFeeAmount = lateFee           // Total historical amount
+			loan.LateFeeRemaining += increment     // Add increment to remaining (what's still owed)
 			if err := s.loanRepo.Update(ctx, loan); err != nil {
 				s.logger.Error().Err(err).Int64("loan_id", loan.ID).Msg("Failed to update late fees")
 				continue
@@ -483,12 +487,14 @@ func RegisterDefaultJobs(scheduler *Scheduler, jobService *JobService) {
 		Enabled:  true,
 	})
 
-	// Calculate daily interest - run every day at midnight
+	// Calculate daily interest - DISABLED for pawnshop model (simple interest)
+	// In pawnshops, interest is calculated once at loan creation, not daily
+	// Only late fees (mora) accumulate when overdue
 	scheduler.AddJob(&Job{
 		Name:     "calculate_daily_interest",
 		Schedule: "every:1m",
 		Handler:  jobService.CalculateDailyInterest,
-		Enabled:  true,
+		Enabled:  false, // Disabled: pawnshop uses simple interest model
 	})
 
 	// Send due date reminders - run every day

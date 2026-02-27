@@ -26,7 +26,7 @@ func (r *LoanRepository) GetByID(ctx context.Context, id int64) (*domain.Loan, e
 	query := `
 		SELECT id, loan_number, branch_id, customer_id, item_id,
 			   loan_amount, interest_rate, interest_amount, principal_remaining, interest_remaining,
-			   total_amount, amount_paid, late_fee_rate, late_fee_amount,
+			   total_amount, amount_paid, late_fee_rate, late_fee_amount, late_fee_remaining,
 			   start_date, due_date, paid_date, confiscated_date,
 			   payment_plan_type, loan_term_days, requires_minimum_payment,
 			   minimum_payment_amount, next_payment_due_date, grace_period_days,
@@ -45,7 +45,7 @@ func (r *LoanRepository) GetByNumber(ctx context.Context, loanNumber string) (*d
 	query := `
 		SELECT id, loan_number, branch_id, customer_id, item_id,
 			   loan_amount, interest_rate, interest_amount, principal_remaining, interest_remaining,
-			   total_amount, amount_paid, late_fee_rate, late_fee_amount,
+			   total_amount, amount_paid, late_fee_rate, late_fee_amount, late_fee_remaining,
 			   start_date, due_date, paid_date, confiscated_date,
 			   payment_plan_type, loan_term_days, requires_minimum_payment,
 			   minimum_payment_amount, next_payment_due_date, grace_period_days,
@@ -140,7 +140,7 @@ func (r *LoanRepository) List(ctx context.Context, params repository.LoanListPar
 	dataQuery := fmt.Sprintf(`
 		SELECT l.id, l.loan_number, l.branch_id, l.customer_id, l.item_id,
 			   l.loan_amount, l.interest_rate, l.interest_amount, l.principal_remaining, l.interest_remaining,
-			   l.total_amount, l.amount_paid, l.late_fee_rate, l.late_fee_amount,
+			   l.total_amount, l.amount_paid, l.late_fee_rate, l.late_fee_amount, l.late_fee_remaining,
 			   l.start_date, l.due_date, l.paid_date, l.confiscated_date,
 			   l.payment_plan_type, l.loan_term_days, l.requires_minimum_payment,
 			   l.minimum_payment_amount, l.next_payment_due_date, l.grace_period_days,
@@ -222,17 +222,17 @@ func (r *LoanRepository) Update(ctx context.Context, loan *domain.Loan) error {
 	query := `
 		UPDATE loans SET
 			interest_amount = $2, principal_remaining = $3, interest_remaining = $4,
-			total_amount = $5, amount_paid = $6, late_fee_amount = $7,
-			due_date = $8, paid_date = $9, confiscated_date = $10,
-			minimum_payment_amount = $11, next_payment_due_date = $12,
-			status = $13, days_overdue = $14, renewal_count = $15, notes = $16,
-			updated_by = $17, updated_at = NOW()
+			total_amount = $5, amount_paid = $6, late_fee_amount = $7, late_fee_remaining = $8,
+			due_date = $9, paid_date = $10, confiscated_date = $11,
+			minimum_payment_amount = $12, next_payment_due_date = $13,
+			status = $14, days_overdue = $15, renewal_count = $16, notes = $17,
+			updated_by = $18, updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
 		loan.ID, loan.InterestAmount, loan.PrincipalRemaining, loan.InterestRemaining,
-		loan.TotalAmount, loan.AmountPaid, loan.LateFeeAmount,
+		loan.TotalAmount, loan.AmountPaid, loan.LateFeeAmount, loan.LateFeeRemaining,
 		loan.DueDate, NullTime(loan.PaidDate), NullTime(loan.ConfiscatedDate),
 		NullFloat64(loan.MinimumPaymentAmount), NullTime(loan.NextPaymentDueDate),
 		loan.Status, loan.DaysOverdue, loan.RenewalCount, NullString(loan.Notes),
@@ -277,7 +277,7 @@ func (r *LoanRepository) GetOverdueLoans(ctx context.Context, branchID int64) ([
 	query := `
 		SELECT id, loan_number, branch_id, customer_id, item_id,
 			   loan_amount, interest_rate, interest_amount, principal_remaining, interest_remaining,
-			   total_amount, amount_paid, late_fee_rate, late_fee_amount,
+			   total_amount, amount_paid, late_fee_rate, late_fee_amount, late_fee_remaining,
 			   start_date, due_date, paid_date, confiscated_date,
 			   payment_plan_type, loan_term_days, requires_minimum_payment,
 			   minimum_payment_amount, next_payment_due_date, grace_period_days,
@@ -472,7 +472,7 @@ func (r *LoanRepository) scanLoan(row *sql.Row) (*domain.Loan, error) {
 		&loan.ID, &loan.LoanNumber, &loan.BranchID, &loan.CustomerID, &loan.ItemID,
 		&loan.LoanAmount, &loan.InterestRate, &loan.InterestAmount,
 		&loan.PrincipalRemaining, &loan.InterestRemaining,
-		&loan.TotalAmount, &loan.AmountPaid, &loan.LateFeeRate, &loan.LateFeeAmount,
+		&loan.TotalAmount, &loan.AmountPaid, &loan.LateFeeRate, &loan.LateFeeAmount, &loan.LateFeeRemaining,
 		&loan.StartDate, &loan.DueDate, &paidDate, &confiscatedDate,
 		&loan.PaymentPlanType, &loan.LoanTermDays, &loan.RequiresMinimumPayment,
 		&minimumPaymentAmount, &nextPaymentDueDate, &loan.GracePeriodDays,
@@ -517,7 +517,7 @@ func (r *LoanRepository) scanLoanRow(rows *sql.Rows) (*domain.Loan, error) {
 		&loan.ID, &loan.LoanNumber, &loan.BranchID, &loan.CustomerID, &loan.ItemID,
 		&loan.LoanAmount, &loan.InterestRate, &loan.InterestAmount,
 		&loan.PrincipalRemaining, &loan.InterestRemaining,
-		&loan.TotalAmount, &loan.AmountPaid, &loan.LateFeeRate, &loan.LateFeeAmount,
+		&loan.TotalAmount, &loan.AmountPaid, &loan.LateFeeRate, &loan.LateFeeAmount, &loan.LateFeeRemaining,
 		&loan.StartDate, &loan.DueDate, &paidDate, &confiscatedDate,
 		&loan.PaymentPlanType, &loan.LoanTermDays, &loan.RequiresMinimumPayment,
 		&minimumPaymentAmount, &nextPaymentDueDate, &loan.GracePeriodDays,
@@ -567,7 +567,7 @@ err := rows.Scan(
 &loan.ID, &loan.LoanNumber, &loan.BranchID, &loan.CustomerID, &loan.ItemID,
 &loan.LoanAmount, &loan.InterestRate, &loan.InterestAmount,
 &loan.PrincipalRemaining, &loan.InterestRemaining,
-&loan.TotalAmount, &loan.AmountPaid, &loan.LateFeeRate, &loan.LateFeeAmount,
+&loan.TotalAmount, &loan.AmountPaid, &loan.LateFeeRate, &loan.LateFeeAmount, &loan.LateFeeRemaining,
 &loan.StartDate, &loan.DueDate, &paidDate, &confiscatedDate,
 &loan.PaymentPlanType, &loan.LoanTermDays, &loan.RequiresMinimumPayment,
 &minimumPaymentAmount, &nextPaymentDueDate, &loan.GracePeriodDays,

@@ -47,7 +47,8 @@ export interface Loan {
 
   // Late fees
   late_fee_rate: number
-  late_fee_amount: number
+  late_fee_amount: number     // Total late fees accrued (historical)
+  late_fee_remaining?: number // Late fees still owed (may not exist in older data)
 
   // Dates
   start_date: string
@@ -143,5 +144,7 @@ export interface LoanListParams {
 
 // Calculate remaining balance
 export function calculateRemainingBalance(loan: Loan): number {
-  return loan.principal_remaining + loan.interest_remaining + loan.late_fee_amount
+  // Use late_fee_remaining (what's still owed) instead of late_fee_amount (historical total)
+  const lateFeeRemaining = loan.late_fee_remaining ?? loan.late_fee_amount
+  return loan.principal_remaining + loan.interest_remaining + lateFeeRemaining
 }

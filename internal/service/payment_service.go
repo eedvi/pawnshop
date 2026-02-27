@@ -84,7 +84,7 @@ func (s *PaymentService) Create(ctx context.Context, input CreatePaymentInput) (
 	}
 
 	// Calculate total amount owed (prevent overpayment)
-	totalOwed := loan.PrincipalRemaining + loan.InterestRemaining + loan.LateFeeAmount
+	totalOwed := loan.PrincipalRemaining + loan.InterestRemaining + loan.LateFeeRemaining
 	if input.Amount > totalOwed {
 		s.logger.Warn().
 			Int64("loan_id", input.LoanID).
@@ -102,9 +102,9 @@ func (s *PaymentService) Create(ctx context.Context, input CreatePaymentInput) (
 	principalPayment := 0.0
 
 	// Apply to late fees first
-	if loan.LateFeeAmount > 0 && remainingPayment > 0 {
-		if remainingPayment >= loan.LateFeeAmount {
-			lateFeePayment = loan.LateFeeAmount
+	if loan.LateFeeRemaining > 0 && remainingPayment > 0 {
+		if remainingPayment >= loan.LateFeeRemaining {
+			lateFeePayment = loan.LateFeeRemaining
 			remainingPayment -= lateFeePayment
 		} else {
 			lateFeePayment = remainingPayment
@@ -135,14 +135,14 @@ func (s *PaymentService) Create(ctx context.Context, input CreatePaymentInput) (
 	}
 
 	// Update loan balances
-	loan.LateFeeAmount -= lateFeePayment
+	loan.LateFeeRemaining -= lateFeePayment // Only reduce remaining, keep LateFeeAmount as historical total
 	loan.InterestRemaining -= interestPayment
 	loan.PrincipalRemaining -= principalPayment
 	loan.AmountPaid += input.Amount
 	loan.UpdatedBy = &input.CreatedBy
 
 	// Check if loan is fully paid
-	isFullyPaid := loan.PrincipalRemaining == 0 && loan.InterestRemaining == 0 && loan.LateFeeAmount == 0
+	isFullyPaid := loan.PrincipalRemaining == 0 && loan.InterestRemaining == 0 && loan.LateFeeRemaining == 0
 	if isFullyPaid {
 		loan.Status = domain.LoanStatusPaid
 		now := time.Now()
@@ -291,7 +291,7 @@ func (s *PaymentService) Reverse(ctx context.Context, input ReversePaymentInput)
 	// Reverse the payment amounts
 	loan.PrincipalRemaining += payment.PrincipalAmount
 	loan.InterestRemaining += payment.InterestAmount
-	loan.LateFeeAmount += payment.LateFeeAmount
+	loan.LateFeeRemaining += payment.LateFeeAmount // Restore to remaining, not to total
 	loan.AmountPaid -= payment.Amount
 	loan.UpdatedBy = &input.ReversedBy
 
@@ -380,8 +380,8 @@ func (s *PaymentService) CalculateMinimumPayment(ctx context.Context, loanID int
 		return loan.RemainingBalance(), nil
 	}
 
-	// Add any late fees
-	return minimumPayment + loan.LateFeeAmount, nil
+	// Add any remaining late fees
+	return minimumPayment + loan.LateFeeRemaining, nil
 }
 
 // CalculateMinimumPaymentDetailed calculates the minimum payment and returns loan details
@@ -401,8 +401,8 @@ func (s *PaymentService) CalculateMinimumPaymentDetailed(ctx context.Context, lo
 		return loan.RemainingBalance(), loan, nil
 	}
 
-	// Add any late fees
-	return minimumPayment + loan.LateFeeAmount, loan, nil
+	// Add any remaining late fees
+	return minimumPayment + loan.LateFeeRemaining, loan, nil
 }
 
 // applyPaymentToInstallments applies a payment amount to loan installments

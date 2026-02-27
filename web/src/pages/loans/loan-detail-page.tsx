@@ -86,7 +86,9 @@ export default function LoanDetailPage() {
 
   const status = LOAN_STATUSES.find((s) => s.value === loan.status)
   const paymentPlan = PAYMENT_PLAN_TYPES.find((p) => p.value === loan.payment_plan_type)
-  const balance = loan.principal_remaining + loan.interest_remaining + loan.late_fee_amount
+  // Use late_fee_remaining (pending) instead of late_fee_amount (historical total)
+  const lateFeeRemaining = loan.late_fee_remaining ?? loan.late_fee_amount ?? 0
+  const balance = loan.principal_remaining + loan.interest_remaining + lateFeeRemaining
   const progressPercent = loan.total_amount > 0 ? (loan.amount_paid / loan.total_amount) * 100 : 0
   const canRenew = ['active', 'overdue'].includes(loan.status)
   const canAcceptPayments = !['paid', 'confiscated'].includes(loan.status)
@@ -162,9 +164,6 @@ export default function LoanDetailPage() {
               Préstamo vencido
             </span>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Mora acumulada: {formatCurrency(loan.late_fee_amount)}
-          </p>
           {gracePeriodInfo.daysUntilConfiscation > 0 ? (
             <p className="mt-2 text-sm text-amber-600 dark:text-amber-500">
               <Clock className="inline h-4 w-4 mr-1" />
@@ -293,7 +292,18 @@ export default function LoanDetailPage() {
               </div>
               <div>
                 <p className="text-muted-foreground">Mora</p>
-                <p className="font-medium">{formatCurrency(loan.late_fee_amount)}</p>
+                <p className="font-medium">
+                  {formatCurrency(loan.late_fee_amount)}
+                  {loan.status === 'paid' && loan.late_fee_amount > 0 && (
+                    <span className="text-xs text-muted-foreground ml-1">(pagada)</span>
+                  )}
+                  {loan.status === 'overdue' && loan.late_fee_remaining !== undefined &&
+                   loan.late_fee_remaining < loan.late_fee_amount && (
+                    <span className="text-xs text-muted-foreground ml-1">
+                      (pendiente: {formatCurrency(loan.late_fee_remaining)})
+                    </span>
+                  )}
+                </p>
               </div>
               <div>
                 <p className="text-muted-foreground">Total Pagado</p>

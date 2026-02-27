@@ -43,8 +43,9 @@ type Loan struct {
 	AmountPaid         float64 `json:"amount_paid"`
 
 	// Late fees
-	LateFeeRate   float64 `json:"late_fee_rate"`
-	LateFeeAmount float64 `json:"late_fee_amount"`
+	LateFeeRate      float64 `json:"late_fee_rate"`
+	LateFeeAmount    float64 `json:"late_fee_amount"`    // Total late fees accrued (historical)
+	LateFeeRemaining float64 `json:"late_fee_remaining"` // Late fees still owed
 
 	// Dates
 	StartDate       Date       `json:"start_date"`
@@ -97,7 +98,7 @@ func (Loan) TableName() string {
 
 // RemainingBalance returns the total remaining balance
 func (l *Loan) RemainingBalance() float64 {
-	return l.PrincipalRemaining + l.InterestRemaining + l.LateFeeAmount
+	return l.PrincipalRemaining + l.InterestRemaining + l.LateFeeRemaining
 }
 
 // IsOverdue checks if the loan is overdue
