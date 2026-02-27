@@ -1,7 +1,23 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
 import { ApiResponse, ApiErrorException } from '@/types/api'
+import { isDesktopApp, desktopApp } from './wails'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+// Check if this is a desktop build (set in vite.config.ts for desktop builds)
+declare const __DESKTOP_APP__: boolean | undefined
+
+// Default API URL - desktop app needs full URL, web app can use relative
+const getDefaultApiUrl = (): string => {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL
+  }
+  // For desktop builds, use full URL
+  if (typeof __DESKTOP_APP__ !== 'undefined' && __DESKTOP_APP__) {
+    return 'http://localhost:8090/api/v1'
+  }
+  return '/api/v1'
+}
+
+let API_BASE_URL = getDefaultApiUrl()
 
 // Storage keys
 const ACCESS_TOKEN_KEY = 'pawnshop_access_token'
@@ -33,6 +49,35 @@ const apiClient: AxiosInstance = axios.create({
   timeout: 30000, // 30 seconds
 })
 
+// Initialize API URL for desktop app
+let isInitialized = false
+let initPromise: Promise<void> | null = null
+
+async function initializeApiUrl(): Promise<void> {
+  if (isInitialized) return
+  if (initPromise) return initPromise
+
+  initPromise = (async () => {
+    if (isDesktopApp()) {
+      try {
+        const url = await desktopApp.getAPIBaseURL()
+        if (url) {
+          API_BASE_URL = url
+          apiClient.defaults.baseURL = url
+        }
+      } catch (err) {
+        console.error('Failed to get API URL from desktop config:', err)
+      }
+    }
+    isInitialized = true
+  })()
+
+  return initPromise
+}
+
+// Initialize on load
+initializeApiUrl()
+
 // Flag to prevent multiple refresh attempts
 let isRefreshing = false
 let refreshSubscribers: ((token: string) => void)[] = []
@@ -48,9 +93,10 @@ function onTokenRefreshed(token: string) {
   refreshSubscribers = []
 }
 
-// Request interceptor - attach auth token
+// Request interceptor - attach auth token and ensure API URL is initialized
 apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  async (config: InternalAxiosRequestConfig) => {
+    await initializeApiUrl()
     const token = tokenStorage.getAccessToken()
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`

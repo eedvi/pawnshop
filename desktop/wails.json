@@ -1,0 +1,21 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "pawnshop-desktop",
+  "outputfilename": "PawnshopPOS",
+  "frontend:dir": "../web",
+  "frontend:install": "npm install",
+  "frontend:build": "npx vite build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Pawnshop Team",
+    "email": "support@pawnshop.local"
+  },
+  "info": {
+    "companyName": "Pawnshop",
+    "productName": "Pawnshop POS",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright 2024 Pawnshop",
+    "comments": "Pawnshop Point of Sale Desktop Application"
+  }
+}

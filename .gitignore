@@ -53,3 +53,9 @@ __debug_bin
 *.jpg
 *.jpeg
 *.gif
+
+# Desktop app (Wails)
+desktop/build/bin/
+web/wailsjs/
+*.md5
+tsconfig.tsbuildinfo
