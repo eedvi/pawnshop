@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Loader2, RotateCcw, CreditCard, Calendar, User, FileText, AlertTriangle } from 'lucide-react'
+import { Loader2, RotateCcw, CreditCard, Calendar, User, FileText, AlertTriangle, Download } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { ROUTES, loanRoute, customerRoute } from '@/routes/routes'
 import { usePayment, useReversePayment } from '@/hooks/use-payments'
+import { useExportPaymentReceipt } from '@/hooks/use-reports'
 import { PAYMENT_STATUSES, PAYMENT_METHODS } from '@/types'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format'
 import { ReversePaymentDialog } from './reverse-payment-dialog'
@@ -21,6 +22,7 @@ export default function PaymentDetailPage() {
 
   const { data: payment, isLoading, error } = usePayment(paymentId)
   const reverseMutation = useReversePayment()
+  const exportReceiptMutation = useExportPaymentReceipt()
 
   const handleReverseConfirm = (reason: string) => {
     reverseMutation.mutate(
@@ -71,15 +73,29 @@ export default function PaymentDetailPage() {
         description="Detalles del pago"
         backUrl={ROUTES.PAYMENTS}
         actions={
-          canReverse && (
+          <div className="flex gap-2">
             <Button
-              variant="destructive"
-              onClick={() => setReverseDialogOpen(true)}
+              variant="outline"
+              onClick={() => exportReceiptMutation.mutate(paymentId)}
+              disabled={exportReceiptMutation.isPending}
             >
-              <RotateCcw className="mr-2 h-4 w-4" />
-              Revertir Pago
+              {exportReceiptMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              Recibo
             </Button>
-          )
+            {canReverse && (
+              <Button
+                variant="destructive"
+                onClick={() => setReverseDialogOpen(true)}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Revertir Pago
+              </Button>
+            )}
+          </div>
         }
       />
 

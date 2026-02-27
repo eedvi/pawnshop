@@ -12,6 +12,7 @@ import {
   CreditCard,
   CheckCircle,
   Clock,
+  FileText,
 } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/page-header'
@@ -29,6 +30,7 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { ROUTES, customerRoute, itemRoute } from '@/routes/routes'
 import { useLoan, useLoanInstallments, useRenewLoan, useConfiscateLoan } from '@/hooks/use-loans'
+import { useExportLoanContract } from '@/hooks/use-reports'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { LOAN_STATUSES, PAYMENT_PLAN_TYPES, RenewLoanInput } from '@/types'
 import { RenewLoanDialog } from './renew-loan-dialog'
@@ -42,6 +44,7 @@ export default function LoanDetailPage() {
   const { data: installments } = useLoanInstallments(loanId)
   const renewMutation = useRenewLoan()
   const confiscateMutation = useConfiscateLoan()
+  const exportContractMutation = useExportLoanContract()
 
   const [renewDialogOpen, setRenewDialogOpen] = useState(false)
   const [confiscateDialogOpen, setConfiscateDialogOpen] = useState(false)
@@ -131,6 +134,18 @@ export default function LoanDetailPage() {
         backUrl={ROUTES.LOANS}
         actions={
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => exportContractMutation.mutate(loanId)}
+              disabled={exportContractMutation.isPending}
+            >
+              {exportContractMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileText className="mr-2 h-4 w-4" />
+              )}
+              Contrato
+            </Button>
             {canRenew && (
               <Button variant="outline" onClick={() => setRenewDialogOpen(true)}>
                 <RefreshCw className="mr-2 h-4 w-4" />

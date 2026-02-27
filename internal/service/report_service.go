@@ -11,12 +11,13 @@ import (
 
 // ReportService handles report generation
 type ReportService struct {
-	loanRepo     repository.LoanRepository
-	paymentRepo  repository.PaymentRepository
-	saleRepo     repository.SaleRepository
-	customerRepo repository.CustomerRepository
-	itemRepo     repository.ItemRepository
-	pdfGenerator *pdf.Generator
+	loanRepo        repository.LoanRepository
+	paymentRepo     repository.PaymentRepository
+	saleRepo        repository.SaleRepository
+	customerRepo    repository.CustomerRepository
+	itemRepo        repository.ItemRepository
+	pdfGenerator    *pdf.Generator
+	ticketGenerator *pdf.ThermalTicketGenerator
 }
 
 // NewReportService creates a new ReportService
@@ -27,14 +28,16 @@ func NewReportService(
 	customerRepo repository.CustomerRepository,
 	itemRepo repository.ItemRepository,
 	pdfGenerator *pdf.Generator,
+	ticketGenerator *pdf.ThermalTicketGenerator,
 ) *ReportService {
 	return &ReportService{
-		loanRepo:     loanRepo,
-		paymentRepo:  paymentRepo,
-		saleRepo:     saleRepo,
-		customerRepo: customerRepo,
-		itemRepo:     itemRepo,
-		pdfGenerator: pdfGenerator,
+		loanRepo:        loanRepo,
+		paymentRepo:     paymentRepo,
+		saleRepo:        saleRepo,
+		customerRepo:    customerRepo,
+		itemRepo:        itemRepo,
+		pdfGenerator:    pdfGenerator,
+		ticketGenerator: ticketGenerator,
 	}
 }
 
@@ -566,4 +569,345 @@ func (s *ReportService) GenerateSaleReceiptPDF(ctx context.Context, saleID int64
 	}
 
 	return s.pdfGenerator.GenerateSaleReceipt(sale, item, customer)
+}
+
+// ExportLoanReportPDF exports the loan report as PDF
+func (s *ReportService) ExportLoanReportPDF(ctx context.Context, branchID int64, dateFrom, dateTo string) ([]byte, error) {
+	report, err := s.GetLoanReport(ctx, branchID, dateFrom, dateTo)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get loans with customer info for details
+	params := repository.LoanListParams{
+		BranchID:  branchID,
+		DueAfter:  &dateFrom,
+		DueBefore: &dateTo,
+		PaginationParams: repository.PaginationParams{
+			PerPage: 100,
+			OrderBy: "created_at",
+			Order:   "desc",
+		},
+	}
+
+	result, err := s.loanRepo.List(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build report items
+	items := make([]pdf.LoanReportItem, 0, len(result.Data))
+	for _, loan := range result.Data {
+		customerName := "N/A"
+		if loan.Customer != nil {
+			customerName = loan.Customer.FirstName + " " + loan.Customer.LastName
+		}
+		itemName := "N/A"
+		if loan.Item != nil {
+			itemName = loan.Item.Name
+		}
+
+		items = append(items, pdf.LoanReportItem{
+			LoanNumber:   loan.LoanNumber,
+			CustomerName: customerName,
+			ItemName:     itemName,
+			Amount:       loan.LoanAmount,
+			Interest:     loan.InterestAmount,
+			Total:        loan.TotalAmount,
+			Status:       string(loan.Status),
+			DueDate:      loan.DueDate.Format("02/01/06"),
+		})
+	}
+
+	data := &pdf.LoanReportData{
+		DateFrom:         dateFrom,
+		DateTo:           dateTo,
+		TotalLoans:       report.TotalLoans,
+		TotalAmount:      report.TotalAmount,
+		TotalInterest:    report.TotalInterest,
+		TotalOutstanding: report.TotalOutstanding,
+		ByStatus:         report.ByStatus,
+		ByStatusAmount:   report.ByStatusAmount,
+		Loans:            items,
+	}
+
+	return s.pdfGenerator.GenerateLoanReportPDF(data)
+}
+
+// ExportPaymentReportPDF exports the payment report as PDF
+func (s *ReportService) ExportPaymentReportPDF(ctx context.Context, branchID int64, dateFrom, dateTo string) ([]byte, error) {
+	report, err := s.GetPaymentReport(ctx, branchID, dateFrom, dateTo)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get payments with details
+	params := repository.PaymentListParams{
+		BranchID: branchID,
+		DateFrom: &dateFrom,
+		DateTo:   &dateTo,
+		PaginationParams: repository.PaginationParams{
+			PerPage: 100,
+			OrderBy: "payment_date",
+			Order:   "desc",
+		},
+	}
+
+	result, err := s.paymentRepo.List(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build report items
+	items := make([]pdf.PaymentReportItem, 0, len(result.Data))
+	for _, payment := range result.Data {
+		if payment.Status != domain.PaymentStatusCompleted {
+			continue
+		}
+
+		customerName := "N/A"
+		customer, _ := s.customerRepo.GetByID(ctx, payment.CustomerID)
+		if customer != nil {
+			customerName = customer.FirstName + " " + customer.LastName
+		}
+
+		loanNumber := "N/A"
+		loan, _ := s.loanRepo.GetByID(ctx, payment.LoanID)
+		if loan != nil {
+			loanNumber = loan.LoanNumber
+		}
+
+		items = append(items, pdf.PaymentReportItem{
+			PaymentNumber: payment.PaymentNumber,
+			CustomerName:  customerName,
+			LoanNumber:    loanNumber,
+			Amount:        payment.Amount,
+			Principal:     payment.PrincipalAmount,
+			Interest:      payment.InterestAmount,
+			LateFee:       payment.LateFeeAmount,
+			Method:        string(payment.PaymentMethod),
+			Date:          payment.PaymentDate.Format("02/01/06"),
+		})
+	}
+
+	data := &pdf.PaymentReportData{
+		DateFrom:       dateFrom,
+		DateTo:         dateTo,
+		TotalPayments:  report.TotalPayments,
+		TotalAmount:    report.TotalAmount,
+		TotalPrincipal: report.TotalPrincipal,
+		TotalInterest:  report.TotalInterest,
+		TotalLateFees:  report.TotalLateFees,
+		ByMethod:       report.ByMethod,
+		ByMethodAmount: report.ByMethodAmount,
+		Payments:       items,
+	}
+
+	return s.pdfGenerator.GeneratePaymentReportPDF(data)
+}
+
+// ExportSalesReportPDF exports the sales report as PDF
+func (s *ReportService) ExportSalesReportPDF(ctx context.Context, branchID int64, dateFrom, dateTo string) ([]byte, error) {
+	report, err := s.GetSalesReport(ctx, branchID, dateFrom, dateTo)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get sales with details
+	params := repository.SaleListParams{
+		BranchID: branchID,
+		DateFrom: &dateFrom,
+		DateTo:   &dateTo,
+		PaginationParams: repository.PaginationParams{
+			PerPage: 100,
+			OrderBy: "sale_date",
+			Order:   "desc",
+		},
+	}
+
+	result, err := s.saleRepo.List(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build report items
+	items := make([]pdf.SaleReportItem, 0, len(result.Data))
+	for _, sale := range result.Data {
+		if sale.Status != domain.SaleStatusCompleted {
+			continue
+		}
+
+		customerName := "Sin cliente"
+		if sale.CustomerID != nil {
+			customer, _ := s.customerRepo.GetByID(ctx, *sale.CustomerID)
+			if customer != nil {
+				customerName = customer.FirstName + " " + customer.LastName
+			}
+		}
+
+		itemName := "N/A"
+		item, _ := s.itemRepo.GetByID(ctx, sale.ItemID)
+		if item != nil {
+			itemName = item.Name
+		}
+
+		items = append(items, pdf.SaleReportItem{
+			SaleNumber:   sale.SaleNumber,
+			CustomerName: customerName,
+			ItemName:     itemName,
+			Price:        sale.SalePrice,
+			Discount:     sale.DiscountAmount,
+			Total:        sale.FinalPrice,
+			Method:       string(sale.PaymentMethod),
+			Date:         sale.SaleDate.Format("02/01/06"),
+		})
+	}
+
+	data := &pdf.SalesReportData{
+		DateFrom:       dateFrom,
+		DateTo:         dateTo,
+		TotalSales:     report.TotalSales,
+		TotalAmount:    report.TotalAmount,
+		TotalDiscounts: report.TotalDiscounts,
+		NetAmount:      report.NetAmount,
+		ByMethod:       report.ByMethod,
+		ByMethodAmount: report.ByMethodAmount,
+		Sales:          items,
+	}
+
+	return s.pdfGenerator.GenerateSalesReportPDF(data)
+}
+
+// ExportOverdueReportPDF exports the overdue report as PDF
+func (s *ReportService) ExportOverdueReportPDF(ctx context.Context, branchID int64) ([]byte, error) {
+	report, err := s.GetOverdueReport(ctx, branchID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build overdue items
+	overdueItems := make([]pdf.OverdueReportItem, 0, len(report.OverdueLoans))
+	for _, loan := range report.OverdueLoans {
+		customerName := "N/A"
+		customer, _ := s.customerRepo.GetByID(ctx, loan.CustomerID)
+		if customer != nil {
+			customerName = customer.FirstName + " " + customer.LastName
+		}
+
+		itemName := "N/A"
+		item, _ := s.itemRepo.GetByID(ctx, loan.ItemID)
+		if item != nil {
+			itemName = item.Name
+		}
+
+		graceEnds := loan.DueDate.AddDate(0, 0, loan.GracePeriodDays).Format("02/01/06")
+
+		overdueItems = append(overdueItems, pdf.OverdueReportItem{
+			LoanNumber:   loan.LoanNumber,
+			CustomerName: customerName,
+			ItemName:     itemName,
+			Amount:       loan.RemainingBalance(),
+			LateFee:      loan.LateFeeAmount,
+			DaysOverdue:  loan.DaysOverdue,
+			DueDate:      loan.DueDate.Format("02/01/06"),
+			GraceEnds:    graceEnds,
+		})
+	}
+
+	// Build approaching due items
+	approachingItems := make([]pdf.OverdueReportItem, 0, len(report.ApproachingDue))
+	for _, loan := range report.ApproachingDue {
+		customerName := "N/A"
+		customer, _ := s.customerRepo.GetByID(ctx, loan.CustomerID)
+		if customer != nil {
+			customerName = customer.FirstName + " " + customer.LastName
+		}
+
+		approachingItems = append(approachingItems, pdf.OverdueReportItem{
+			LoanNumber:   loan.LoanNumber,
+			CustomerName: customerName,
+			Amount:       loan.RemainingBalance(),
+			DueDate:      loan.DueDate.Format("02/01/06"),
+		})
+	}
+
+	data := &pdf.OverdueReportData{
+		GeneratedAt:    time.Now().Format("02/01/2006 15:04"),
+		TotalOverdue:   report.TotalOverdue,
+		TotalAmount:    report.TotalAmount,
+		TotalLateFees:  report.TotalLateFees,
+		OverdueLoans:   overdueItems,
+		ApproachingDue: approachingItems,
+	}
+
+	return s.pdfGenerator.GenerateOverdueReportPDF(data)
+}
+
+// ============================================================================
+// Thermal Ticket Generation
+// ============================================================================
+
+// GenerateLoanTicket generates a thermal ticket for a loan
+func (s *ReportService) GenerateLoanTicket(ctx context.Context, loanID int64, paperSize string) ([]byte, error) {
+	loan, err := s.loanRepo.GetByID(ctx, loanID)
+	if err != nil {
+		return nil, err
+	}
+
+	customer, err := s.customerRepo.GetByID(ctx, loan.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+
+	item, err := s.itemRepo.GetByID(ctx, loan.ItemID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use paper size specific generation if requested
+	if paperSize == "58mm" {
+		return s.ticketGenerator.GenerateLoanTicketWithSize(loan, customer, item, pdf.ThermalPaper58mm)
+	}
+
+	return s.ticketGenerator.GenerateLoanTicket(loan, customer, item)
+}
+
+// GeneratePaymentTicket generates a thermal ticket for a payment
+func (s *ReportService) GeneratePaymentTicket(ctx context.Context, paymentID int64) ([]byte, error) {
+	payment, err := s.paymentRepo.GetByID(ctx, paymentID)
+	if err != nil {
+		return nil, err
+	}
+
+	loan, err := s.loanRepo.GetByID(ctx, payment.LoanID)
+	if err != nil {
+		return nil, err
+	}
+
+	customer, err := s.customerRepo.GetByID(ctx, payment.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.ticketGenerator.GeneratePaymentTicket(payment, loan, customer)
+}
+
+// GenerateSaleTicket generates a thermal ticket for a sale
+func (s *ReportService) GenerateSaleTicket(ctx context.Context, saleID int64) ([]byte, error) {
+	sale, err := s.saleRepo.GetByID(ctx, saleID)
+	if err != nil {
+		return nil, err
+	}
+
+	item, err := s.itemRepo.GetByID(ctx, sale.ItemID)
+	if err != nil {
+		return nil, err
+	}
+
+	var customer *domain.Customer
+	if sale.CustomerID != nil {
+		customer, _ = s.customerRepo.GetByID(ctx, *sale.CustomerID)
+	}
+
+	return s.ticketGenerator.GenerateSaleTicket(sale, item, customer)
 }

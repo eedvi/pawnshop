@@ -143,9 +143,10 @@ func main() {
 	backupPath := filepath.Join(".", "backups")
 	backupService := service.NewBackupService(&cfg.Database, backupPath, log.Logger)
 
-	// Initialize PDF generator
+	// Initialize PDF generator and thermal ticket generator
 	pdfGenerator := pdf.NewGenerator(cfg.App.Name, "", "")
-	reportService := service.NewReportService(loanRepo, paymentRepo, saleRepo, customerRepo, itemRepo, pdfGenerator)
+	ticketGenerator := pdf.NewThermalTicketGenerator(cfg.App.Name, "", "", "")
+	reportService := service.NewReportService(loanRepo, paymentRepo, saleRepo, customerRepo, itemRepo, pdfGenerator, ticketGenerator)
 
 	// Initialize audit logger
 	auditLogger := middleware.NewAuditLogger(auditService)
