@@ -219,6 +219,63 @@ func (h *ReportHandler) ExportOverdueReportPDF(c *fiber.Ctx) error {
 	return c.Send(pdfData)
 }
 
+// ============================================================================
+// Thermal Ticket Endpoints
+// ============================================================================
+
+// ExportLoanTicket exports a loan thermal ticket as PDF
+func (h *ReportHandler) ExportLoanTicket(c *fiber.Ctx) error {
+	loanID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return response.BadRequest(c, "Invalid loan ID format")
+	}
+
+	paperSize := c.Query("paper_size", "80mm") // Default to 80mm
+
+	pdfData, err := h.reportService.GenerateLoanTicket(c.Context(), loanID, paperSize)
+	if err != nil {
+		return response.InternalError(c, "Failed to generate loan ticket")
+	}
+
+	c.Set("Content-Type", "application/pdf")
+	c.Set("Content-Disposition", "attachment; filename=ticket_prestamo_"+c.Params("id")+".pdf")
+	return c.Send(pdfData)
+}
+
+// ExportPaymentTicket exports a payment thermal ticket as PDF
+func (h *ReportHandler) ExportPaymentTicket(c *fiber.Ctx) error {
+	paymentID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return response.BadRequest(c, "Invalid payment ID format")
+	}
+
+	pdfData, err := h.reportService.GeneratePaymentTicket(c.Context(), paymentID)
+	if err != nil {
+		return response.InternalError(c, "Failed to generate payment ticket")
+	}
+
+	c.Set("Content-Type", "application/pdf")
+	c.Set("Content-Disposition", "attachment; filename=ticket_pago_"+c.Params("id")+".pdf")
+	return c.Send(pdfData)
+}
+
+// ExportSaleTicket exports a sale thermal ticket as PDF
+func (h *ReportHandler) ExportSaleTicket(c *fiber.Ctx) error {
+	saleID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return response.BadRequest(c, "Invalid sale ID format")
+	}
+
+	pdfData, err := h.reportService.GenerateSaleTicket(c.Context(), saleID)
+	if err != nil {
+		return response.InternalError(c, "Failed to generate sale ticket")
+	}
+
+	c.Set("Content-Type", "application/pdf")
+	c.Set("Content-Disposition", "attachment; filename=ticket_venta_"+c.Params("id")+".pdf")
+	return c.Send(pdfData)
+}
+
 // RegisterRoutes registers report routes
 func (h *ReportHandler) RegisterRoutes(app fiber.Router, authMiddleware *middleware.AuthMiddleware) {
 	reports := app.Group("/reports")
@@ -239,9 +296,14 @@ func (h *ReportHandler) RegisterRoutes(app fiber.Router, authMiddleware *middlew
 	reports.Get("/sales/export", authMiddleware.RequirePermission("reports.export"), h.ExportSalesReportPDF)
 	reports.Get("/overdue/export", authMiddleware.RequirePermission("reports.export"), h.ExportOverdueReportPDF)
 
-	// Individual document exports (PDF)
+	// Individual document exports (PDF - full size)
 	reports.Get("/export/daily", authMiddleware.RequirePermission("reports.export"), h.ExportDailyReport)
 	reports.Get("/export/loan/:id/contract", authMiddleware.RequirePermission("reports.export"), h.ExportLoanContract)
 	reports.Get("/export/payment/:id/receipt", authMiddleware.RequirePermission("reports.export"), h.ExportPaymentReceipt)
 	reports.Get("/export/sale/:id/receipt", authMiddleware.RequirePermission("reports.export"), h.ExportSaleReceipt)
+
+	// Thermal ticket exports (PDF - thermal paper size)
+	reports.Get("/ticket/loan/:id", authMiddleware.RequirePermission("reports.export"), h.ExportLoanTicket)
+	reports.Get("/ticket/payment/:id", authMiddleware.RequirePermission("reports.export"), h.ExportPaymentTicket)
+	reports.Get("/ticket/sale/:id", authMiddleware.RequirePermission("reports.export"), h.ExportSaleTicket)
 }

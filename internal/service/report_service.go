@@ -11,12 +11,13 @@ import (
 
 // ReportService handles report generation
 type ReportService struct {
-	loanRepo     repository.LoanRepository
-	paymentRepo  repository.PaymentRepository
-	saleRepo     repository.SaleRepository
-	customerRepo repository.CustomerRepository
-	itemRepo     repository.ItemRepository
-	pdfGenerator *pdf.Generator
+	loanRepo        repository.LoanRepository
+	paymentRepo     repository.PaymentRepository
+	saleRepo        repository.SaleRepository
+	customerRepo    repository.CustomerRepository
+	itemRepo        repository.ItemRepository
+	pdfGenerator    *pdf.Generator
+	ticketGenerator *pdf.ThermalTicketGenerator
 }
 
 // NewReportService creates a new ReportService
@@ -27,14 +28,16 @@ func NewReportService(
 	customerRepo repository.CustomerRepository,
 	itemRepo repository.ItemRepository,
 	pdfGenerator *pdf.Generator,
+	ticketGenerator *pdf.ThermalTicketGenerator,
 ) *ReportService {
 	return &ReportService{
-		loanRepo:     loanRepo,
-		paymentRepo:  paymentRepo,
-		saleRepo:     saleRepo,
-		customerRepo: customerRepo,
-		itemRepo:     itemRepo,
-		pdfGenerator: pdfGenerator,
+		loanRepo:        loanRepo,
+		paymentRepo:     paymentRepo,
+		saleRepo:        saleRepo,
+		customerRepo:    customerRepo,
+		itemRepo:        itemRepo,
+		pdfGenerator:    pdfGenerator,
+		ticketGenerator: ticketGenerator,
 	}
 }
 
@@ -838,4 +841,73 @@ func (s *ReportService) ExportOverdueReportPDF(ctx context.Context, branchID int
 	}
 
 	return s.pdfGenerator.GenerateOverdueReportPDF(data)
+}
+
+// ============================================================================
+// Thermal Ticket Generation
+// ============================================================================
+
+// GenerateLoanTicket generates a thermal ticket for a loan
+func (s *ReportService) GenerateLoanTicket(ctx context.Context, loanID int64, paperSize string) ([]byte, error) {
+	loan, err := s.loanRepo.GetByID(ctx, loanID)
+	if err != nil {
+		return nil, err
+	}
+
+	customer, err := s.customerRepo.GetByID(ctx, loan.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+
+	item, err := s.itemRepo.GetByID(ctx, loan.ItemID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use paper size specific generation if requested
+	if paperSize == "58mm" {
+		return s.ticketGenerator.GenerateLoanTicketWithSize(loan, customer, item, pdf.ThermalPaper58mm)
+	}
+
+	return s.ticketGenerator.GenerateLoanTicket(loan, customer, item)
+}
+
+// GeneratePaymentTicket generates a thermal ticket for a payment
+func (s *ReportService) GeneratePaymentTicket(ctx context.Context, paymentID int64) ([]byte, error) {
+	payment, err := s.paymentRepo.GetByID(ctx, paymentID)
+	if err != nil {
+		return nil, err
+	}
+
+	loan, err := s.loanRepo.GetByID(ctx, payment.LoanID)
+	if err != nil {
+		return nil, err
+	}
+
+	customer, err := s.customerRepo.GetByID(ctx, payment.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.ticketGenerator.GeneratePaymentTicket(payment, loan, customer)
+}
+
+// GenerateSaleTicket generates a thermal ticket for a sale
+func (s *ReportService) GenerateSaleTicket(ctx context.Context, saleID int64) ([]byte, error) {
+	sale, err := s.saleRepo.GetByID(ctx, saleID)
+	if err != nil {
+		return nil, err
+	}
+
+	item, err := s.itemRepo.GetByID(ctx, sale.ItemID)
+	if err != nil {
+		return nil, err
+	}
+
+	var customer *domain.Customer
+	if sale.CustomerID != nil {
+		customer, _ = s.customerRepo.GetByID(ctx, *sale.CustomerID)
+	}
+
+	return s.ticketGenerator.GenerateSaleTicket(sale, item, customer)
 }

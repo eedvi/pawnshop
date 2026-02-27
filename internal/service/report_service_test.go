@@ -19,7 +19,7 @@ func setupReportService() (*ReportService, *mocks.MockLoanRepository, *mocks.Moc
 	saleRepo := new(mocks.MockSaleRepository)
 	customerRepo := new(mocks.MockCustomerRepository)
 	itemRepo := new(mocks.MockItemRepository)
-	service := NewReportService(loanRepo, paymentRepo, saleRepo, customerRepo, itemRepo, nil)
+	service := NewReportService(loanRepo, paymentRepo, saleRepo, customerRepo, itemRepo, nil, nil)
 	return service, loanRepo, paymentRepo, saleRepo, customerRepo, itemRepo
 }
 
